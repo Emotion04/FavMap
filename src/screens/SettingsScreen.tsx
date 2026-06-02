@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import GlassCard from '../components/GlassCard';
+import { AMapService, CityDistrict } from '../services/amap';
 import { STORAGE_KEYS } from '../utils/constants';
 
 interface SettingsScreenProps {
@@ -12,12 +13,15 @@ interface SettingsScreenProps {
 
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
   const { theme, themeSetting, colors, isDark, updateTheme } = useTheme();
-  const { favorites, exportFavorites, importFavorites } = useFavorites();
+  const { favorites, exportFavorites } = useFavorites();
   const [exporting, setExporting] = useState(false);
   const [amapApiKey, setAmapApiKey] = useState('');
   const [amapSecurityCode, setAmapSecurityCode] = useState('');
   const [amapWebApiKey, setAmapWebApiKey] = useState('');
   const [savingApiKey, setSavingApiKey] = useState(false);
+  const [districtCity, setDistrictCity] = useState('');
+  const [districts, setDistricts] = useState<CityDistrict[] | null>(null);
+  const [loadingDistricts, setLoadingDistricts] = useState(false);
 
   // 加载 API Key 和安全密钥
   useEffect(() => {
@@ -82,6 +86,25 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
   // 切换主题
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
     updateTheme(newTheme);
+  };
+
+  // 查询城市分区
+  const handleQueryDistricts = async () => {
+    if (!districtCity.trim()) return;
+    setLoadingDistricts(true);
+    setDistricts(null);
+    try {
+      const data = await AMapService.getCityDistricts(districtCity.trim());
+      if (data.length === 0) {
+        Alert.alert('提示', '未找到该城市的分区信息');
+      } else {
+        setDistricts(data);
+      }
+    } catch (error) {
+      Alert.alert('错误', '查询失败，请检查网络和 API Key');
+    } finally {
+      setLoadingDistricts(false);
+    }
   };
 
   return (
@@ -207,6 +230,59 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           </View>
         </GlassCard>
 
+        {/* 城市分区查询 */}
+        <GlassCard style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>🏙️ 城市分区</Text>
+          <Text style={[styles.apiKeyHint, { color: colors.textSecondary }]}>
+            输入城市名称，查看行政区划信息
+          </Text>
+          <View style={styles.districtInputRow}>
+            <TextInput
+              style={[styles.districtInput, { color: colors.text, borderColor: colors.border }]}
+              value={districtCity}
+              onChangeText={setDistrictCity}
+              placeholder="例如：北京、上海、杭州"
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={handleQueryDistricts}
+            />
+            <TouchableOpacity
+              onPress={handleQueryDistricts}
+              style={[styles.queryButton, { backgroundColor: colors.primary }]}
+              disabled={loadingDistricts}
+            >
+              <Text style={styles.queryButtonText}>
+                {loadingDistricts ? '...' : '查询'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {districts && districts.length > 0 && (
+            <View style={[styles.districtList, { borderColor: colors.border }]}>
+              {districts.map((d, i) => (
+                <View
+                  key={d.name}
+                  style={[
+                    styles.districtItem,
+                    i < districts.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                  ]}
+                >
+                  <View style={styles.districtInfo}>
+                    <Text style={[styles.districtName, { color: colors.text }]}>{d.name}</Text>
+                    <Text style={[styles.districtLevel, { color: colors.textSecondary }]}>
+                      {d.level === 'district' ? '区/县' : d.level === 'street' ? '街道' : d.level}
+                    </Text>
+                  </View>
+                  <Text style={[styles.districtCoord, { color: colors.textSecondary }]}>
+                    {d.center.latitude.toFixed(4)}, {d.center.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </GlassCard>
+
         {/* 关于 */}
         <GlassCard style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>关于</Text>
@@ -325,6 +401,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFF',
+  },
+  districtInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  districtInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  queryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  queryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  districtList: {
+    borderTopWidth: 1,
+    marginTop: 4,
+  },
+  districtItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  districtInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  districtName: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  districtLevel: {
+    fontSize: 12,
+  },
+  districtCoord: {
+    fontSize: 12,
+    fontFamily: 'monospace',
   },
   aboutContent: {
     alignItems: 'center',
