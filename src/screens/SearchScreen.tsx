@@ -24,20 +24,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
   const handleSearch = async () => {
     if (!query.trim()) return;
 
-    // Web 平台提示
-    if (Platform.OS === 'web') {
-      Alert.alert(
-        '提示',
-        'Web 版本需要配置高德地图 API Key 才能使用搜索功能。请在设置页面配置。',
-        [{ text: '确定' }]
-      );
-      return;
-    }
-
     setLoading(true);
     try {
       const data = await AMapService.searchKeyword(query);
       setResults(data);
+      if (data.length === 0) {
+        // 未找到结果，可能是 API Key 未配置或搜索无结果
+      }
     } catch (error) {
       console.error('搜索失败:', error);
       Alert.alert('错误', '搜索失败，请检查网络连接和 API Key 配置');

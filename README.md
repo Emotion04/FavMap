@@ -28,7 +28,7 @@
 - **语言**: TypeScript
 - **状态管理**: useState + Context
 - **本地存储**: AsyncStorage
-- **地图服务**: 高德原生 SDK
+- **地图服务**: 高德原生 SDK (移动端) + 高德 JS API v2.0 (Web)
 - **导航**: React Navigation
 - **UI 组件**: 自定义组件（液态玻璃效果）
 
@@ -56,24 +56,34 @@ npx expo start
 
 ### 配置
 
+Web 版需要配置三种高德凭证（移动端仅需 Web 服务 Key）：
+
 1. **高德地图 API Key**
-   - 访问 [高德开放平台](https://lbs.amap.com/)
-   - 创建应用并获取 API Key
-   - 在应用的"设置"页面中填入 API Key
+   - 访问 [高德开放平台控制台](https://console.amap.com/)
+   - 创建应用，申请以下两种 Key：
+
+   | 凭证 | 平台类型 | 用途 |
+   |------|----------|------|
+   | Key | **Web端(JS API)** | 地图渲染（瓦片、交互） |
+   | 安全密钥 | 与 JS API Key 配套 | JS API v2.0 鉴权 |
+   | Key | **Web服务** | REST API（地点搜索、地理编码） |
+
+   > 自 2021 年 12 月起，JS API v2.0 强制要求安全密钥。详见 [高德安全策略](https://lbs.amap.com/api/javascript-api-v2/guide/abc/security)。
+
+2. 在应用的"设置"页面中分别填入对应的 Key 和安全密钥
 
 ### 平台支持
 
 | 功能 | Web | iOS | Android |
 |------|-----|-----|---------|
-| 地图显示 | ❌ | ✅ | ✅ |
-| 地点搜索 | ⚠️ | ✅ | ✅ |
+| 地图显示 | ✅ (3D) | ✅ | ✅ |
+| 地点搜索 | ✅ | ✅ | ✅ |
 | 收藏管理 | ✅ | ✅ | ✅ |
 | 定位功能 | ❌ | ✅ | ✅ |
 | 深色模式 | ✅ | ✅ | ✅ |
 | 社交分享 | ❌ | ✅ | ✅ |
 
-> ⚠️ = 需要配置 API Key
-> 详见 [PLATFORM_SUPPORT.md](./PLATFORM_SUPPORT.md)
+> Web 版地图使用高德 JS API v2.0 (WebGL 3D)，需要配置 JS API Key + 安全密钥。搜索使用 Web 服务 Key。
 
 ## 项目结构
 
@@ -83,7 +93,8 @@ FavMap/
 │   ├── components/          # 可复用组件
 │   │   ├── GlassCard.tsx    # 液态玻璃卡片
 │   │   ├── MapMarker.tsx    # 地图标记
-│   │   └── SearchBar.tsx    # 搜索栏
+│   │   ├── SearchBar.tsx    # 搜索栏
+│   │   └── WebMap.tsx       # Web 地图组件（高德 JS API v2.0）
 │   ├── screens/             # 页面
 │   │   ├── MapScreen.tsx    # 地图主页面
 │   │   ├── SearchScreen.tsx # 搜索页面

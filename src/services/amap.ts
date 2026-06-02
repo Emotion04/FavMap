@@ -2,9 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { SearchResult, SubwayStation } from '../types';
 
-// 获取 API Key
+// 获取 Web 服务 API Key（优先读取专用的 Web 服务 Key，fallback 到通用 Key）
 const getApiKey = async (): Promise<string> => {
   try {
+    const webKey = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_WEB_API_KEY);
+    if (webKey) return webKey;
     const key = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_API_KEY);
     return key || '';
   } catch {
@@ -164,9 +166,15 @@ export const AMapService = {
       const data = await response.json();
 
       if (data.status === '1' && data.districts && data.districts.length > 0) {
-        const district = data.districts[0];
-        if (district.districts) {
-          return district.districts.map((d: any) => ({
+        // 找到子分区最多的层级（通常是 city 级别，而非 province）
+        let best = data.districts[0];
+        for (const d of data.districts) {
+          if ((d.districts?.length || 0) > (best.districts?.length || 0)) {
+            best = d;
+          }
+        }
+        if (best.districts && best.districts.length > 0) {
+          return best.districts.map((d: any) => ({
             name: d.name,
             center: {
               latitude: parseFloat(d.center.split(',')[1]),
@@ -175,6 +183,15 @@ export const AMapService = {
             level: d.level,
           }));
         }
+        // fallback: 没有子分区则返回顶层结果本身
+        return data.districts.map((d: any) => ({
+          name: d.name,
+          center: {
+            latitude: parseFloat(d.center.split(',')[1]),
+            longitude: parseFloat(d.center.split(',')[0]),
+          },
+          level: d.level,
+        }));
       }
       return [];
     } catch (error) {

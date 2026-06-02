@@ -32,6 +32,8 @@ export const STORAGE_KEYS = {
   FAVORITES: '@favmap_favorites',
   SETTINGS: '@favmap_settings',
   AMAP_API_KEY: '@favmap_amap_api_key',
+  AMAP_SECURITY_CODE: '@favmap_amap_security_code',
+  AMAP_WEB_API_KEY: '@favmap_amap_web_api_key',
 };
 
 // 主题颜色
