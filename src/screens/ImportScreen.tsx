@@ -25,16 +25,6 @@ const ImportScreen: React.FC<ImportScreenProps> = ({ onBack }) => {
       return;
     }
 
-    // Web 平台提示
-    if (Platform.OS === 'web') {
-      Alert.alert(
-        '提示',
-        'Web 版本需要配置高德地图 API Key 才能使用批量导入功能。请在设置页面配置。',
-        [{ text: '确定' }]
-      );
-      return;
-    }
-
     setImporting(true);
     setResults(null);
 

@@ -15,9 +15,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
   const { favorites, exportFavorites, importFavorites } = useFavorites();
   const [exporting, setExporting] = useState(false);
   const [amapApiKey, setAmapApiKey] = useState('');
+  const [amapSecurityCode, setAmapSecurityCode] = useState('');
+  const [amapWebApiKey, setAmapWebApiKey] = useState('');
   const [savingApiKey, setSavingApiKey] = useState(false);
 
-  // 加载 API Key
+  // 加载 API Key 和安全密钥
   useEffect(() => {
     loadApiKey();
   }, []);
@@ -25,17 +27,23 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
   const loadApiKey = async () => {
     try {
       const key = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_API_KEY);
+      const code = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_SECURITY_CODE);
+      const webKey = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_WEB_API_KEY);
       if (key) setAmapApiKey(key);
+      if (code) setAmapSecurityCode(code);
+      if (webKey) setAmapWebApiKey(webKey);
     } catch (error) {
       console.error('加载 API Key 失败:', error);
     }
   };
 
-  // 保存 API Key
+  // 保存 API Key 和安全密钥
   const handleSaveApiKey = async () => {
     setSavingApiKey(true);
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.AMAP_API_KEY, amapApiKey);
+      await AsyncStorage.setItem(STORAGE_KEYS.AMAP_SECURITY_CODE, amapSecurityCode);
+      await AsyncStorage.setItem(STORAGE_KEYS.AMAP_WEB_API_KEY, amapWebApiKey);
       Alert.alert('成功', 'API Key 已保存');
     } catch (error) {
       console.error('保存 API Key 失败:', error);
@@ -121,21 +129,46 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           </View>
         </GlassCard>
 
-        {/* 高德地图 API Key */}
+        {/* 高德地图 API 配置 */}
         <GlassCard style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>高德地图 API Key</Text>
-          <Text style={[styles.apiKeyHint, { color: colors.textSecondary }]}>
-            请在高德开放平台申请 API Key 后填入
-          </Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>高德地图 API</Text>
+
+          <Text style={[styles.apiLabel, { color: colors.text }]}>JS API Key（地图渲染）</Text>
           <TextInput
             style={[styles.apiKeyInput, { color: colors.text, borderColor: colors.border }]}
             value={amapApiKey}
             onChangeText={setAmapApiKey}
-            placeholder="请输入高德地图 API Key"
+            placeholder="Web端(JS API) Key"
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             autoCorrect={false}
           />
+
+          <Text style={[styles.apiLabel, { color: colors.text }]}>安全密钥</Text>
+          <TextInput
+            style={[styles.apiKeyInput, { color: colors.text, borderColor: colors.border }]}
+            value={amapSecurityCode}
+            onChangeText={setAmapSecurityCode}
+            placeholder="securityJsCode"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <Text style={[styles.apiLabel, { color: colors.text }]}>Web 服务 Key（搜索/地点查询）</Text>
+          <TextInput
+            style={[styles.apiKeyInput, { color: colors.text, borderColor: colors.border }]}
+            value={amapWebApiKey}
+            onChangeText={setAmapWebApiKey}
+            placeholder="Web服务 Key，用于搜索等功能"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <Text style={[styles.apiKeyHint, { color: colors.textSecondary }]}>
+            地图渲染用 JS API Key+安全密钥；搜索用 Web 服务 Key
+          </Text>
           <TouchableOpacity
             onPress={handleSaveApiKey}
             style={[styles.saveButton, { backgroundColor: colors.primary }]}
@@ -223,6 +256,12 @@ const styles = StyleSheet.create({
   apiKeyHint: {
     fontSize: 14,
     marginBottom: 12,
+  },
+  apiLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
+    marginTop: 8,
   },
   apiKeyInput: {
     borderWidth: 1,

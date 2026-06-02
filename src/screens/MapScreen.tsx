@@ -6,6 +6,7 @@ import { useFavorites } from '../contexts/FavoritesContext';
 import { useTheme } from '../contexts/ThemeContext';
 import SearchBar from '../components/SearchBar';
 import GlassCard from '../components/GlassCard';
+import WebMap from '../components/WebMap';
 import { FavoritePlace } from '../types';
 import { DEFAULT_CENTER } from '../utils/constants';
 import { formatDistance } from '../utils/helpers';
@@ -52,80 +53,92 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
     onPlacePress(place);
   };
 
-  // Web 版本 - 显示收藏列表
+  // Web 版本 - 地图 + 收藏列表
   if (Platform.OS === 'web') {
+    const MAP_HEIGHT = height * 0.45;
+
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* 头部 */}
-        <View style={styles.webHeader}>
-          <View style={styles.webHeaderContent}>
-            <View style={styles.webHeaderLeft}>
-              <Text style={[styles.webTitle, { color: colors.text }]}>🗺️ FavMap</Text>
-              <Text style={[styles.webSubtitle, { color: colors.textSecondary }]}>
-                收藏地图应用
+        {/* 地图区域 */}
+        <View style={[styles.webMapContainer, { height: MAP_HEIGHT }]}>
+          <WebMap
+            favorites={favorites}
+            onPlacePress={handlePlacePress}
+            userLocation={userLocation}
+          />
+
+          {/* 地图上的搜索栏 */}
+          <View style={styles.webMapSearch}>
+            <TouchableOpacity onPress={onSearchPress} activeOpacity={0.8}>
+              <BlurView
+                intensity={40}
+                tint={isDark ? 'dark' : 'light'}
+                style={[styles.searchButton, { borderColor: colors.border }]}
+              >
+                <Text style={styles.searchIcon}>🔍</Text>
+                <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>搜索地点...</Text>
+              </BlurView>
+            </TouchableOpacity>
+          </View>
+
+          {/* 地图上的收藏计数 */}
+          <View style={styles.webMapCounter}>
+            <GlassCard style={styles.countBadge}>
+              <Text style={[styles.countBadgeText, { color: colors.text }]}>
+                ⭐ {favorites.length}
               </Text>
-            </View>
-            <View style={styles.webHeaderRight}>
-              <TouchableOpacity onPress={onSearchPress} activeOpacity={0.8}>
-                <BlurView
-                  intensity={20}
-                  tint={isDark ? 'dark' : 'light'}
-                  style={[styles.searchButton, { borderColor: colors.border }]}
-                >
-                  <Text style={styles.searchIcon}>🔍</Text>
-                  <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>搜索地点...</Text>
-                </BlurView>
-              </TouchableOpacity>
-            </View>
+            </GlassCard>
           </View>
         </View>
 
-        {/* 收藏列表 */}
-        <ScrollView style={styles.webContent}>
-          {favorites.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>⭐</Text>
-              <Text style={[styles.emptyText, { color: colors.text }]}>
-                还没有收藏地点
-              </Text>
-              <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
-                点击搜索按钮添加你的第一个收藏
-              </Text>
-            </View>
-          ) : (
-            favorites.map((place) => (
-              <TouchableOpacity
-                key={place.id}
-                onPress={() => handlePlacePress(place)}
-                activeOpacity={0.8}
-              >
-                <GlassCard style={styles.placeCard}>
-                  <View style={styles.placeContent}>
-                    <Text style={styles.placeIcon}>{place.icon}</Text>
-                    <View style={styles.placeInfo}>
-                      <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
-                        {place.name}
-                      </Text>
-                      <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {place.address}
-                      </Text>
-                      {place.rating && (
-                        <Text style={styles.placeRating}>⭐ {place.rating.toFixed(1)}</Text>
-                      )}
-                    </View>
-                    <Text style={[styles.placeArrow, { color: colors.textSecondary }]}>›</Text>
-                  </View>
-                </GlassCard>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+        {/* 底部收藏列表 */}
+        <View style={[styles.webListSection, { backgroundColor: colors.background }]}>
+          <View style={styles.webListHeader}>
+            <Text style={[styles.webTitle, { color: colors.text }]}>🗺️ FavMap</Text>
+            <Text style={[styles.webSubtitle, { color: colors.textSecondary }]}>
+              {favorites.length > 0 ? `${favorites.length} 个收藏地点` : '收藏地图应用'}
+            </Text>
+          </View>
 
-        {/* 统计信息 */}
-        <View style={[styles.webFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-            ⭐ {favorites.length} 个收藏
-          </Text>
+          <ScrollView style={styles.webContent} showsVerticalScrollIndicator={false}>
+            {favorites.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyIcon}>⭐</Text>
+                <Text style={[styles.emptyText, { color: colors.text }]}>
+                  还没有收藏地点
+                </Text>
+                <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+                  点击搜索按钮添加你的第一个收藏
+                </Text>
+              </View>
+            ) : (
+              favorites.map((place) => (
+                <TouchableOpacity
+                  key={place.id}
+                  onPress={() => handlePlacePress(place)}
+                  activeOpacity={0.8}
+                >
+                  <GlassCard style={styles.placeCard}>
+                    <View style={styles.placeContent}>
+                      <Text style={styles.placeIcon}>{place.icon}</Text>
+                      <View style={styles.placeInfo}>
+                        <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
+                          {place.name}
+                        </Text>
+                        <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {place.address}
+                        </Text>
+                        {place.rating && (
+                          <Text style={styles.placeRating}>⭐ {place.rating.toFixed(1)}</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.placeArrow, { color: colors.textSecondary }]}>›</Text>
+                    </View>
+                  </GlassCard>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
         </View>
       </View>
     );
@@ -255,30 +268,55 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   // Web 版本样式
-  webHeader: {
-    paddingTop: 40,
-    paddingBottom: 16,
+  webMapContainer: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  webMapSearch: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+  },
+  webMapCounter: {
+    position: 'absolute',
+    bottom: 12,
+    left: 16,
+    zIndex: 10,
+  },
+  countBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  countBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  webListSection: {
+    flex: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -16,
+    zIndex: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  webListHeader: {
+    paddingTop: 16,
+    paddingBottom: 8,
     paddingHorizontal: 20,
   },
-  webHeaderContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  webHeaderLeft: {
-    flex: 1,
-  },
-  webHeaderRight: {
-    flex: 2,
-    marginLeft: 24,
-  },
   webTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '600',
     marginBottom: 2,
   },
   webSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
   },
   searchButton: {
     flexDirection: 'row',
@@ -299,14 +337,6 @@ const styles = StyleSheet.create({
   webContent: {
     flex: 1,
     paddingHorizontal: 16,
-  },
-  webFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 14,
   },
   emptyContainer: {
     alignItems: 'center',

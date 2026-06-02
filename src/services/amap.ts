@@ -2,9 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/constants';
 import { SearchResult, SubwayStation } from '../types';
 
-// 获取 API Key
+// 获取 Web 服务 API Key（用于 REST API 调用）
 const getApiKey = async (): Promise<string> => {
   try {
+    // 优先使用 Web 服务 Key，fallback 到通用 Key
+    const webKey = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_WEB_API_KEY);
+    if (webKey) return webKey;
     const key = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_API_KEY);
     return key || '';
   } catch {
