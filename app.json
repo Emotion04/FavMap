@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "FavMap",
+    "slug": "favmap",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.favmap.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "FavMap 需要访问您的位置以显示附近的地点和收藏",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "FavMap 需要访问您的位置以显示附近的地点和收藏"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.favmap.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "FavMap 需要访问您的位置以显示附近的地点和收藏"
+        }
+      ]
+    ]
+  }
+}
