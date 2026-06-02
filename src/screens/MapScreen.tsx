@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Alert, Platform, ScrollView } from 'react-native';
+import { BlurView } from 'expo-blur';
 import * as Location from 'expo-location';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -18,7 +19,7 @@ interface MapScreenProps {
 
 const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) => {
   const { favorites } = useFavorites();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [selectedPlace, setSelectedPlace] = useState<FavoritePlace | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
@@ -66,10 +67,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
             </View>
             <View style={styles.webHeaderRight}>
               <TouchableOpacity onPress={onSearchPress} activeOpacity={0.8}>
-                <View style={[styles.searchButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <BlurView
+                  intensity={20}
+                  tint={isDark ? 'dark' : 'light'}
+                  style={[styles.searchButton, { borderColor: colors.border }]}
+                >
                   <Text style={styles.searchIcon}>🔍</Text>
                   <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>搜索地点...</Text>
-                </View>
+                </BlurView>
               </TouchableOpacity>
             </View>
           </View>
@@ -251,8 +256,8 @@ const styles = StyleSheet.create({
   },
   // Web 版本样式
   webHeader: {
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingTop: 40,
+    paddingBottom: 16,
     paddingHorizontal: 20,
   },
   webHeaderContent: {
@@ -264,30 +269,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   webHeaderRight: {
-    marginLeft: 16,
+    flex: 2,
+    marginLeft: 24,
   },
   webTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   webSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
   },
   searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
     borderWidth: 1,
+    overflow: 'hidden',
   },
   searchIcon: {
-    fontSize: 18,
-    marginRight: 8,
+    fontSize: 20,
+    marginRight: 12,
   },
   searchPlaceholder: {
-    fontSize: 14,
+    fontSize: 16,
   },
   webContent: {
     flex: 1,
