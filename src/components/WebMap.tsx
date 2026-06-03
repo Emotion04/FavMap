@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, Text, Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEYS, DEFAULT_CENTER, DEFAULT_ZOOM } from '../utils/constants';
+import { ApiStorageService } from '../services/apiStorage';
+import { DEFAULT_CENTER, DEFAULT_ZOOM } from '../utils/constants';
 import { FavoritePlace } from '../types';
 
 // 高德 JS API 类型声明
@@ -49,13 +49,17 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
   // 加载高德 JS API
   const initMap = useCallback(async () => {
     try {
-      const apiKey = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_API_KEY);
-      if (!apiKey) {
-        setError('请先在设置页面配置高德地图 API Key（Web端 JS API 类型）');
+      // 获取高德地图配置
+      const amapConfig = await ApiStorageService.getProviderConfig('amap');
+      const jsApi = amapConfig.apis.find((api) => api.id === 'amap_js');
+
+      if (!jsApi?.apiKey) {
+        setError('请先在设置页面配置高德地图 JS API Key');
         return;
       }
 
-      const securityCode = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_SECURITY_CODE);
+      const apiKey = jsApi.apiKey;
+      const securityCode = jsApi.securityCode;
 
       // 加载 loader.js（只加载一次）
       if (!document.querySelector('script[src*="loader.js"]')) {
