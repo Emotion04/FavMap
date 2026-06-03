@@ -35,10 +35,11 @@ export const AMapService = {
   async searchKeyword(keyword: string, city?: string, maxPages: number = 3): Promise<SearchResult[]> {
     try {
       const apiKey = await this.getApiKey();
-      console.log('AMap searchKeyword - API Key:', apiKey ? '已配置' : '未配置');
+      console.log('=== AMap 搜索开始 ===');
+      console.log('API Key:', apiKey ? `${apiKey.substring(0, 8)}...` : '未配置');
 
       if (!apiKey) {
-        console.error('未配置高德地图 API Key');
+        console.error('错误: 未配置高德地图 API Key');
         return [];
       }
 
@@ -50,12 +51,39 @@ export const AMapService = {
         const cityParam = city ? `&city=${encodeURIComponent(city)}` : '';
         const url = `https://restapi.amap.com/v3/place/text?key=${apiKey}&keywords=${encodeURIComponent(keyword)}${cityParam}&offset=${pageSize}&page=${page}&extensions=all`;
 
-        console.log(`AMap 搜索请求 (第${page}页):`, url);
+        console.log(`请求第${page}页:`, url);
         const response = await fetch(url);
         const data = await response.json();
-        console.log(`AMap 搜索响应 (第${page}页):`, data);
 
-        if (data.status === '1' && data.pois && data.pois.length > 0) {
+        console.log(`第${page}页响应:`, {
+          status: data.status,
+          info: data.info,
+          infocode: data.infocode,
+          count: data.pois ? data.pois.length : 0,
+        });
+
+        // 检查 API 错误
+        if (data.status !== '1') {
+          console.error(`API 错误: ${data.info} (代码: ${data.infocode})`);
+
+          // 提供具体的错误信息
+          let errorMessage = '搜索失败';
+          if (data.infocode === '10001') {
+            errorMessage = 'API Key 不正确或未配置';
+          } else if (data.infocode === '10003') {
+            errorMessage = 'API Key 已过期';
+          } else if (data.infocode === '10004') {
+            errorMessage = 'API Key 被禁用';
+          } else if (data.infocode === '10005') {
+            errorMessage = '请求 quota 超限';
+          } else if (data.infocode === '20000') {
+            errorMessage = '请求参数错误';
+          }
+
+          throw new Error(errorMessage);
+        }
+
+        if (data.pois && data.pois.length > 0) {
           const results = data.pois.map((poi: any) => ({
             id: poi.id,
             name: poi.name,
@@ -69,11 +97,15 @@ export const AMapService = {
           }));
           allResults.push(...results);
 
+          console.log(`第${page}页获取 ${results.length} 条，累计 ${allResults.length} 条`);
+
           // 如果返回的结果少于每页数量，说明没有更多了
           if (data.pois.length < pageSize) {
+            console.log('已到达最后一页');
             break;
           }
         } else {
+          console.log(`第${page}页无结果`);
           break;
         }
       }
@@ -82,7 +114,7 @@ export const AMapService = {
       return allResults;
     } catch (error) {
       console.error('搜索地点失败:', error);
-      return [];
+      throw error; // 重新抛出错误以便上层处理
     }
   },
 

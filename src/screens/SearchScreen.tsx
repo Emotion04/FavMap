@@ -107,11 +107,21 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
 
     try {
       const mapService = await MapServiceFactory.getService();
-      console.log('搜索:', query, '城市:', city || '全国');
+      console.log('=== 开始搜索 ===');
+      console.log('关键词:', query);
+      console.log('城市:', city || '全国');
+      console.log('用户位置:', userLocation);
 
       // 获取多页结果（最多 3 页，约 75 条）
       const data = await mapService.searchKeyword(query, city || undefined, 3);
-      console.log('原始结果:', data.length, '条');
+      console.log('搜索完成，结果数量:', data.length);
+
+      if (data.length > 0) {
+        console.log('前3个结果:');
+        data.slice(0, 3).forEach((item, i) => {
+          console.log(`  ${i + 1}. ${item.name} - ${item.address}`);
+        });
+      }
 
       // 按距离排序（如果有用户位置）
       let sortedResults = data;
@@ -133,9 +143,16 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
       if (sortedResults.length === 0) {
         Alert.alert('提示', '未找到结果，请检查 API Key 配置是否正确');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('搜索失败:', error);
-      Alert.alert('错误', '搜索失败，请检查网络连接和 API Key 配置');
+
+      // 提供更详细的错误信息
+      let errorMessage = '搜索失败，请检查网络连接和 API Key 配置';
+      if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert('搜索错误', errorMessage);
     } finally {
       setLoading(false);
     }
