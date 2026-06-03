@@ -1,18 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEYS } from '../utils/constants';
+import { ApiStorageService } from './apiStorage';
 import { SearchResult, SubwayStation } from '../types';
-
-// 获取 Web 服务 API Key（优先读取专用的 Web 服务 Key，fallback 到通用 Key）
-const getApiKey = async (): Promise<string> => {
-  try {
-    const webKey = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_WEB_API_KEY);
-    if (webKey) return webKey;
-    const key = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_API_KEY);
-    return key || '';
-  } catch {
-    return '';
-  }
-};
 
 // 城市区域信息
 export interface CityDistrict {
@@ -26,10 +14,29 @@ export interface CityDistrict {
 
 // 高德地图 API 服务
 export const AMapService = {
+  // 获取 API Key（从 ApiStorageService 读取）
+  async getApiKey(): Promise<string> {
+    try {
+      const config = await ApiStorageService.getProviderConfig('amap');
+      // 优先使用 Web 服务 Key
+      const webApi = config.apis.find((api) => api.id === 'amap_web');
+      if (webApi?.apiKey) return webApi.apiKey;
+
+      // 否则使用 JS API Key
+      const jsApi = config.apis.find((api) => api.id === 'amap_js');
+      return jsApi?.apiKey || '';
+    } catch (error) {
+      console.error('获取高德 API Key 失败:', error);
+      return '';
+    }
+  },
+
   // 搜索地点
   async searchKeyword(keyword: string, city?: string): Promise<SearchResult[]> {
     try {
-      const apiKey = await getApiKey();
+      const apiKey = await this.getApiKey();
+      console.log('AMap searchKeyword - API Key:', apiKey ? '已配置' : '未配置');
+
       if (!apiKey) {
         console.error('未配置高德地图 API Key');
         return [];
@@ -38,8 +45,10 @@ export const AMapService = {
       const cityParam = city ? `&city=${encodeURIComponent(city)}` : '';
       const url = `https://restapi.amap.com/v3/place/text?key=${apiKey}&keywords=${encodeURIComponent(keyword)}${cityParam}&offset=20&page=1&extensions=all`;
 
+      console.log('AMap 搜索请求:', url);
       const response = await fetch(url);
       const data = await response.json();
+      console.log('AMap 搜索响应:', data);
 
       if (data.status === '1' && data.pois) {
         return data.pois.map((poi: any) => ({
@@ -64,7 +73,7 @@ export const AMapService = {
   // 获取地点详情
   async getDetails(poiId: string): Promise<any> {
     try {
-      const apiKey = await getApiKey();
+      const apiKey = await this.getApiKey();
       if (!apiKey) return null;
 
       const url = `https://restapi.amap.com/v3/place/detail?key=${apiKey}&id=${poiId}&extensions=all`;
@@ -85,7 +94,7 @@ export const AMapService = {
   // 搜索附近地铁站
   async searchNearbySubway(latitude: number, longitude: number): Promise<SubwayStation[]> {
     try {
-      const apiKey = await getApiKey();
+      const apiKey = await this.getApiKey();
       if (!apiKey) return [];
 
       const url = `https://restapi.amap.com/v3/place/around?key=${apiKey}&location=${longitude},${latitude}&keywords=地铁站&radius=2000&offset=10&page=1&extensions=all`;
@@ -97,7 +106,7 @@ export const AMapService = {
         return data.pois.slice(0, 3).map((poi: any) => ({
           name: poi.name,
           distance: parseFloat(poi.distance),
-          walkingTime: parseFloat(poi.distance) / 80, // 假设步行速度 80米/分钟
+          walkingTime: parseFloat(poi.distance) / 80,
         }));
       }
       return [];
@@ -110,7 +119,7 @@ export const AMapService = {
   // 地理编码（地址转坐标）
   async geocode(address: string, city?: string): Promise<{ latitude: number; longitude: number } | null> {
     try {
-      const apiKey = await getApiKey();
+      const apiKey = await this.getApiKey();
       if (!apiKey) return null;
 
       const cityParam = city ? `&city=${encodeURIComponent(city)}` : '';
@@ -136,7 +145,7 @@ export const AMapService = {
   // 逆地理编码（坐标转地址）
   async reverseGeocode(latitude: number, longitude: number): Promise<string | null> {
     try {
-      const apiKey = await getApiKey();
+      const apiKey = await this.getApiKey();
       if (!apiKey) return null;
 
       const url = `https://restapi.amap.com/v3/geocode/regeo?key=${apiKey}&location=${longitude},${latitude}`;
@@ -157,7 +166,7 @@ export const AMapService = {
   // 获取城市区域信息
   async getCityDistricts(city: string): Promise<CityDistrict[]> {
     try {
-      const apiKey = await getApiKey();
+      const apiKey = await this.getApiKey();
       if (!apiKey) return [];
 
       const url = `https://restapi.amap.com/v3/config/district?key=${apiKey}&keywords=${encodeURIComponent(city)}&subdistrict=1&extensions=base`;
@@ -166,7 +175,6 @@ export const AMapService = {
       const data = await response.json();
 
       if (data.status === '1' && data.districts && data.districts.length > 0) {
-        // 找到子分区最多的层级（通常是 city 级别，而非 province）
         let best = data.districts[0];
         for (const d of data.districts) {
           if ((d.districts?.length || 0) > (best.districts?.length || 0)) {
@@ -183,7 +191,6 @@ export const AMapService = {
             level: d.level,
           }));
         }
-        // fallback: 没有子分区则返回顶层结果本身
         return data.districts.map((d: any) => ({
           name: d.name,
           center: {

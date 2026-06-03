@@ -43,6 +43,7 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,11 +85,8 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
       const AMap = await window.AMapLoader.load({
         key: apiKey,
         version: '2.0',
-        plugins: ['AMap.Scale', 'AMap.ToolBar'],
+        plugins: ['AMap.Scale', 'AMap.ToolBar', 'AMap.Geolocation'],
       });
-
-      // 埋点
-      AMap.getConfig().appname = 'amap-jsapi-skill';
 
       if (!mapContainerRef.current) return;
 
@@ -96,17 +94,18 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
       const map = new AMap.Map(mapContainerRef.current, {
         viewMode: '3D',
         zoom: DEFAULT_ZOOM,
-        center: [DEFAULT_CENTER.longitude, DEFAULT_CENTER.latitude],
+        center: [userLocation?.longitude || DEFAULT_CENTER.longitude, userLocation?.latitude || DEFAULT_CENTER.latitude],
         resizeEnable: true,
       });
-
-      map.addControl(new AMap.Scale());
-      map.addControl(new AMap.ToolBar({ position: 'RT' }));
 
       mapInstanceRef.current = map;
       setLoaded(true);
 
-      // 如果有用户位置，添加定位标记
+      // 添加控件
+      map.addControl(new AMap.Scale());
+      map.addControl(new AMap.ToolBar());
+
+      // 添加用户位置标记
       if (userLocation) {
         const userMarker = new AMap.Marker({
           position: [userLocation.longitude, userLocation.latitude],
@@ -119,7 +118,9 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
           zIndex: 100,
         });
         map.add(userMarker);
+        userMarkerRef.current = userMarker;
       }
+
     } catch (e: any) {
       console.error('地图初始化失败:', e);
       setError(`地图加载失败: ${e?.message || '请检查 Key 和安全密钥是否正确'}`);
@@ -150,6 +151,7 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
     document.head.appendChild(style);
   }, []);
 
+  // 初始化地图
   useEffect(() => {
     initMap();
 
@@ -159,7 +161,40 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [initMap]);
+
+  // 更新用户位置标记和地图中心
+  useEffect(() => {
+    if (!mapInstanceRef.current || !loaded || !userLocation) return;
+
+    const map = mapInstanceRef.current;
+    const AMap = window.AMap;
+
+    // 更新用户位置标记
+    if (userMarkerRef.current) {
+      // 更新现有标记位置
+      userMarkerRef.current.setPosition([userLocation.longitude, userLocation.latitude]);
+    } else {
+      // 创建新的用户标记
+      const userMarker = new AMap.Marker({
+        position: [userLocation.longitude, userLocation.latitude],
+        icon: new AMap.Icon({
+          size: new AMap.Size(24, 24),
+          image: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',
+          imageSize: new AMap.Size(24, 24),
+        }),
+        title: '我的位置',
+        zIndex: 100,
+      });
+      map.add(userMarker);
+      userMarkerRef.current = userMarker;
+    }
+
+    // 移动地图中心到用户位置
+    map.setCenter([userLocation.longitude, userLocation.latitude]);
+    map.setZoom(15);
+
+  }, [userLocation, loaded]);
 
   // 更新收藏标记
   useEffect(() => {
@@ -169,22 +204,18 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
     const AMap = window.AMap;
 
     // 清除旧标记
-    markersRef.current.forEach((m) => map.remove(m));
+    markersRef.current.forEach((marker) => {
+      map.remove(marker);
+    });
     markersRef.current = [];
 
-    if (favorites.length === 0) {
-      // 没有收藏时回到默认视图
-      map.setZoomAndCenter(DEFAULT_ZOOM, [DEFAULT_CENTER.longitude, DEFAULT_CENTER.latitude]);
-      return;
-    }
-
+    // 添加新标记
     const newMarkers: any[] = [];
 
     favorites.forEach((place) => {
       const icon = place.icon || '⭐';
       const bgColor = categoryIcons[icon] || '#1890ff';
 
-      // 使用自定义 content 创建标记（参考 skill 中的分类图标 Marker 模式）
       const marker = new AMap.Marker({
         position: [place.coordinate.longitude, place.coordinate.latitude],
         content: `<div class="favmap-marker" style="--color: ${bgColor}">
@@ -203,8 +234,10 @@ const WebMap: React.FC<WebMapProps> = ({ favorites, onPlacePress, userLocation }
 
     markersRef.current = newMarkers;
 
-    // 自动缩放到包含所有标记
-    map.setFitView(null, false, [60, 60, 60, 60]);
+    // 如果有收藏点，自动缩放到包含所有标记
+    if (newMarkers.length > 0) {
+      map.setFitView(null, false, [60, 60, 60, 60]);
+    }
   }, [favorites, loaded, onPlacePress]);
 
   if (Platform.OS !== 'web') return null;
