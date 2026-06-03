@@ -1,3 +1,29 @@
+// 地图提供商类型
+export type MapProvider = 'amap' | 'tencent' | 'baidu';
+
+// API 类型
+export type ApiType = 'map' | 'search' | 'geocoding';
+
+// API 配置
+export interface ApiConfig {
+  id: string;
+  name: string;
+  provider: MapProvider;
+  type: ApiType;
+  apiKey: string;
+  securityCode?: string; // 仅高德需要
+  description: string;
+}
+
+// 地图提供商配置
+export interface MapProviderConfig {
+  id: MapProvider;
+  name: string;
+  icon: string;
+  description: string;
+  apis: ApiConfig[];
+}
+
 // 收藏地点
 export interface FavoritePlace {
   id: string;
@@ -28,6 +54,7 @@ export interface UserSettings {
   theme: 'light' | 'dark' | 'system';
   defaultIcon: string;
   mapStyle: string;
+  activeProvider: MapProvider; // 当前使用的地图提供商
 }
 
 // 搜索结果

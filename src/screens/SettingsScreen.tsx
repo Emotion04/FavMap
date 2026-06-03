@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, Share, TextInput } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, TextInput, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import GlassCard from '../components/GlassCard';
-import { AMapService, CityDistrict } from '../services/amap';
-import { STORAGE_KEYS } from '../utils/constants';
+import { MapProvider, MapProviderConfig, ApiConfig } from '../types';
+import { ApiStorageService } from '../services/apiStorage';
+import { MAP_PROVIDERS } from '../config/apiConfig';
 
 interface SettingsScreenProps {
   onImportPress?: () => void;
@@ -15,45 +16,84 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
   const { theme, themeSetting, colors, isDark, updateTheme } = useTheme();
   const { favorites, exportFavorites } = useFavorites();
   const [exporting, setExporting] = useState(false);
-  const [amapApiKey, setAmapApiKey] = useState('');
-  const [amapSecurityCode, setAmapSecurityCode] = useState('');
-  const [amapWebApiKey, setAmapWebApiKey] = useState('');
-  const [savingApiKey, setSavingApiKey] = useState(false);
-  const [districtCity, setDistrictCity] = useState('');
-  const [districts, setDistricts] = useState<CityDistrict[] | null>(null);
-  const [loadingDistricts, setLoadingDistricts] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<MapProvider>('amap');
+  const [providerConfigs, setProviderConfigs] = useState<MapProviderConfig[]>([]);
+  const [expandedProvider, setExpandedProvider] = useState<MapProvider | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // 加载 API Key 和安全密钥
+  // 加载配置
   useEffect(() => {
-    loadApiKey();
+    loadConfigs();
   }, []);
 
-  const loadApiKey = async () => {
+  const loadConfigs = async () => {
     try {
-      const key = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_API_KEY);
-      const code = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_SECURITY_CODE);
-      const webKey = await AsyncStorage.getItem(STORAGE_KEYS.AMAP_WEB_API_KEY);
-      if (key) setAmapApiKey(key);
-      if (code) setAmapSecurityCode(code);
-      if (webKey) setAmapWebApiKey(webKey);
+      const provider = await ApiStorageService.getActiveProvider();
+      setActiveProvider(provider);
+
+      const configs = await ApiStorageService.getAllProviderConfigs();
+      setProviderConfigs(configs);
+
+      // 默认展开当前活跃的提供商
+      setExpandedProvider(provider);
     } catch (error) {
-      console.error('加载 API Key 失败:', error);
+      console.error('加载配置失败:', error);
     }
   };
 
-  // 保存 API Key 和安全密钥
-  const handleSaveApiKey = async () => {
-    setSavingApiKey(true);
+  // 切换活跃提供商
+  const handleSetActiveProvider = async (provider: MapProvider) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.AMAP_API_KEY, amapApiKey);
-      await AsyncStorage.setItem(STORAGE_KEYS.AMAP_SECURITY_CODE, amapSecurityCode);
-      await AsyncStorage.setItem(STORAGE_KEYS.AMAP_WEB_API_KEY, amapWebApiKey);
-      Alert.alert('成功', 'API Key 已保存');
+      await ApiStorageService.setActiveProvider(provider);
+      setActiveProvider(provider);
+      Alert.alert('成功', `已切换到${MAP_PROVIDERS.find(p => p.id === provider)?.name}`);
     } catch (error) {
-      console.error('保存 API Key 失败:', error);
+      Alert.alert('错误', '切换失败');
+    }
+  };
+
+  // 更新 API Key
+  const handleUpdateApiKey = (providerId: MapProvider, apiId: string, value: string) => {
+    setProviderConfigs((prev) =>
+      prev.map((provider) =>
+        provider.id === providerId
+          ? {
+              ...provider,
+              apis: provider.apis.map((api) =>
+                api.id === apiId ? { ...api, apiKey: value } : api
+              ),
+            }
+          : provider
+      )
+    );
+  };
+
+  // 更新安全密钥
+  const handleUpdateSecurityCode = (providerId: MapProvider, apiId: string, value: string) => {
+    setProviderConfigs((prev) =>
+      prev.map((provider) =>
+        provider.id === providerId
+          ? {
+              ...provider,
+              apis: provider.apis.map((api) =>
+                api.id === apiId ? { ...api, securityCode: value } : api
+              ),
+            }
+          : provider
+      )
+    );
+  };
+
+  // 保存提供商配置
+  const handleSaveProviderConfig = async (provider: MapProviderConfig) => {
+    setSaving(true);
+    try {
+      await ApiStorageService.saveProviderConfig(provider);
+      Alert.alert('成功', `${provider.name} 配置已保存`);
+    } catch (error) {
       Alert.alert('错误', '保存失败');
     } finally {
-      setSavingApiKey(false);
+      setSaving(false);
     }
   };
 
@@ -62,10 +102,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
     setExporting(true);
     try {
       const json = await exportFavorites();
-      await Share.share({
-        title: 'FavMap 收藏数据',
-        message: json,
-      });
+      if (Platform.OS === 'web') {
+        // Web 版本复制到剪贴板
+        await navigator.clipboard.writeText(json);
+        Alert.alert('成功', '数据已复制到剪贴板');
+      } else {
+        const { Share } = require('react-native');
+        await Share.share({
+          title: 'FavMap 收藏数据',
+          message: json,
+        });
+      }
     } catch (error) {
       console.error('导出失败:', error);
       Alert.alert('错误', '导出失败');
@@ -74,37 +121,113 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
     }
   };
 
-  // 导入数据
-  const handleImport = () => {
-    if (onImportPress) {
-      onImportPress();
-    } else {
-      Alert.alert('提示', '导入功能开发中');
-    }
-  };
+  // 渲染 API 配置项
+  const renderApiConfig = (provider: MapProviderConfig, api: ApiConfig) => (
+    <View key={api.id} style={styles.apiItem}>
+      <Text style={[styles.apiName, { color: colors.text }]}>{api.name}</Text>
+      <Text style={[styles.apiDescription, { color: colors.textSecondary }]}>{api.description}</Text>
 
-  // 切换主题
-  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
-    updateTheme(newTheme);
-  };
+      <TextInput
+        style={[styles.apiInput, { color: colors.text, borderColor: colors.border }]}
+        value={api.apiKey}
+        onChangeText={(value) => handleUpdateApiKey(provider.id, api.id, value)}
+        placeholder={`输入 ${api.name}`}
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
 
-  // 查询城市分区
-  const handleQueryDistricts = async () => {
-    if (!districtCity.trim()) return;
-    setLoadingDistricts(true);
-    setDistricts(null);
-    try {
-      const data = await AMapService.getCityDistricts(districtCity.trim());
-      if (data.length === 0) {
-        Alert.alert('提示', '未找到该城市的分区信息');
-      } else {
-        setDistricts(data);
-      }
-    } catch (error) {
-      Alert.alert('错误', '查询失败，请检查网络和 API Key');
-    } finally {
-      setLoadingDistricts(false);
-    }
+      {/* 高德地图安全密钥 */}
+      {api.id === 'amap_js' && (
+        <>
+          <Text style={[styles.apiName, { color: colors.text, marginTop: 12 }]}>安全密钥</Text>
+          <Text style={[styles.apiDescription, { color: colors.textSecondary }]}>
+            JS API v2.0 鉴权必需
+          </Text>
+          <TextInput
+            style={[styles.apiInput, { color: colors.text, borderColor: colors.border }]}
+            value={api.securityCode || ''}
+            onChangeText={(value) => handleUpdateSecurityCode(provider.id, api.id, value)}
+            placeholder="输入安全密钥"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </>
+      )}
+    </View>
+  );
+
+  // 渲染提供商卡片
+  const renderProviderCard = (provider: MapProviderConfig) => {
+    const isActive = activeProvider === provider.id;
+    const isExpanded = expandedProvider === provider.id;
+
+    return (
+      <GlassCard
+        key={provider.id}
+        style={{
+          ...styles.providerCard,
+          ...(isActive ? styles.providerCardActive : {}),
+        }}
+      >
+        {/* 提供商头部 */}
+        <TouchableOpacity
+          onPress={() => setExpandedProvider(isExpanded ? null : provider.id)}
+          style={styles.providerHeader}
+        >
+          <View style={styles.providerInfo}>
+            <Text style={styles.providerIcon}>{provider.icon}</Text>
+            <View style={styles.providerText}>
+              <View style={styles.providerNameRow}>
+                <Text style={[styles.providerName, { color: colors.text }]}>{provider.name}</Text>
+                {isActive && (
+                  <View style={[styles.activeBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.activeBadgeText}>使用中</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.providerDesc, { color: colors.textSecondary }]}>{provider.description}</Text>
+            </View>
+          </View>
+          <Text style={[styles.expandIcon, { color: colors.textSecondary }]}>
+            {isExpanded ? '▼' : '▶'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* 展开的配置区域 */}
+        {isExpanded && (
+          <View style={styles.providerContent}>
+            {/* API 配置 */}
+            {provider.apis.map((api) => renderApiConfig(provider, api))}
+
+            {/* 操作按钮 */}
+            <View style={styles.providerActions}>
+              <TouchableOpacity
+                onPress={() => handleSaveProviderConfig(provider)}
+                style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                disabled={saving}
+              >
+                <Text style={styles.saveButtonText}>
+                  {saving ? '保存中...' : '保存配置'}
+                </Text>
+              </TouchableOpacity>
+
+              {!isActive && (
+                <TouchableOpacity
+                  onPress={() => handleSetActiveProvider(provider.id)}
+                  style={[styles.activateButton, { borderColor: colors.primary }]}
+                >
+                  <Text style={[styles.activateButtonText, { color: colors.primary }]}>
+                    设为默认
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+      </GlassCard>
+    );
   };
 
   return (
@@ -114,37 +237,28 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
         <Text style={[styles.headerTitle, { color: colors.text }]}>设置</Text>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* 主题设置 */}
         <GlassCard style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>主题</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>🎨 主题</Text>
           <View style={styles.themeOptions}>
             <TouchableOpacity
-              onPress={() => handleThemeChange('light')}
-              style={[
-                styles.themeOption,
-                themeSetting === 'light' && styles.themeOptionSelected,
-              ]}
+              onPress={() => updateTheme('light')}
+              style={[styles.themeOption, themeSetting === 'light' && styles.themeOptionSelected]}
             >
               <Text style={styles.themeIcon}>☀️</Text>
               <Text style={[styles.themeText, { color: colors.text }]}>浅色</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => handleThemeChange('dark')}
-              style={[
-                styles.themeOption,
-                themeSetting === 'dark' && styles.themeOptionSelected,
-              ]}
+              onPress={() => updateTheme('dark')}
+              style={[styles.themeOption, themeSetting === 'dark' && styles.themeOptionSelected]}
             >
               <Text style={styles.themeIcon}>🌙</Text>
               <Text style={[styles.themeText, { color: colors.text }]}>深色</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => handleThemeChange('system')}
-              style={[
-                styles.themeOption,
-                themeSetting === 'system' && styles.themeOptionSelected,
-              ]}
+              onPress={() => updateTheme('system')}
+              style={[styles.themeOption, themeSetting === 'system' && styles.themeOptionSelected]}
             >
               <Text style={styles.themeIcon}>⚙️</Text>
               <Text style={[styles.themeText, { color: colors.text }]}>跟随系统</Text>
@@ -152,60 +266,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           </View>
         </GlassCard>
 
-        {/* 高德地图 API 配置 */}
-        <GlassCard style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>高德地图 API</Text>
-
-          <Text style={[styles.apiLabel, { color: colors.text }]}>JS API Key（地图渲染）</Text>
-          <TextInput
-            style={[styles.apiKeyInput, { color: colors.text, borderColor: colors.border }]}
-            value={amapApiKey}
-            onChangeText={setAmapApiKey}
-            placeholder="Web端(JS API) Key"
-            placeholderTextColor={colors.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={[styles.apiLabel, { color: colors.text }]}>安全密钥</Text>
-          <TextInput
-            style={[styles.apiKeyInput, { color: colors.text, borderColor: colors.border }]}
-            value={amapSecurityCode}
-            onChangeText={setAmapSecurityCode}
-            placeholder="securityJsCode"
-            placeholderTextColor={colors.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={[styles.apiLabel, { color: colors.text }]}>Web 服务 Key（搜索/地点查询）</Text>
-          <TextInput
-            style={[styles.apiKeyInput, { color: colors.text, borderColor: colors.border }]}
-            value={amapWebApiKey}
-            onChangeText={setAmapWebApiKey}
-            placeholder="Web服务 Key，用于搜索等功能"
-            placeholderTextColor={colors.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={[styles.apiKeyHint, { color: colors.textSecondary }]}>
-            地图渲染用 JS API Key+安全密钥；搜索用 Web 服务 Key
+        {/* 地图 API 配置 */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text, paddingHorizontal: 16 }]}>
+            🗺️ 地图 API 配置
           </Text>
-          <TouchableOpacity
-            onPress={handleSaveApiKey}
-            style={[styles.saveButton, { backgroundColor: colors.primary }]}
-            disabled={savingApiKey}
-          >
-            <Text style={styles.saveButtonText}>
-              {savingApiKey ? '保存中...' : '保存'}
-            </Text>
-          </TouchableOpacity>
-        </GlassCard>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, paddingHorizontal: 16 }]}>
+            选择地图提供商并配置 API Key
+          </Text>
+
+          {providerConfigs.map(renderProviderCard)}
+        </View>
 
         {/* 数据管理 */}
         <GlassCard style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>数据管理</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>📦 数据管理</Text>
           <View style={styles.dataInfo}>
             <Text style={[styles.dataText, { color: colors.text }]}>
               收藏数量：{favorites.length} 个
@@ -222,7 +297,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={handleImport}
+              onPress={onImportPress}
               style={[styles.dataButton, { backgroundColor: colors.primary }]}
             >
               <Text style={styles.dataButtonText}>导入数据</Text>
@@ -230,62 +305,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           </View>
         </GlassCard>
 
-        {/* 城市分区查询 */}
-        <GlassCard style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>🏙️ 城市分区</Text>
-          <Text style={[styles.apiKeyHint, { color: colors.textSecondary }]}>
-            输入城市名称，查看行政区划信息
-          </Text>
-          <View style={styles.districtInputRow}>
-            <TextInput
-              style={[styles.districtInput, { color: colors.text, borderColor: colors.border }]}
-              value={districtCity}
-              onChangeText={setDistrictCity}
-              placeholder="例如：北京、上海、杭州"
-              placeholderTextColor={colors.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-              onSubmitEditing={handleQueryDistricts}
-            />
-            <TouchableOpacity
-              onPress={handleQueryDistricts}
-              style={[styles.queryButton, { backgroundColor: colors.primary }]}
-              disabled={loadingDistricts}
-            >
-              <Text style={styles.queryButtonText}>
-                {loadingDistricts ? '...' : '查询'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {districts && districts.length > 0 && (
-            <View style={[styles.districtList, { borderColor: colors.border }]}>
-              {districts.map((d, i) => (
-                <View
-                  key={d.name}
-                  style={[
-                    styles.districtItem,
-                    i < districts.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
-                  ]}
-                >
-                  <View style={styles.districtInfo}>
-                    <Text style={[styles.districtName, { color: colors.text }]}>{d.name}</Text>
-                    <Text style={[styles.districtLevel, { color: colors.textSecondary }]}>
-                      {d.level === 'district' ? '区/县' : d.level === 'street' ? '街道' : d.level}
-                    </Text>
-                  </View>
-                  <Text style={[styles.districtCoord, { color: colors.textSecondary }]}>
-                    {d.center.latitude.toFixed(4)}, {d.center.longitude.toFixed(4)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </GlassCard>
-
         {/* 关于 */}
         <GlassCard style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>关于</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>ℹ️ 关于</Text>
           <View style={styles.aboutContent}>
             <Text style={[styles.aboutText, { color: colors.text }]}>
               FavMap - 收藏地图应用
@@ -294,7 +316,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
               版本 1.0.0
             </Text>
             <Text style={[styles.aboutDescription, { color: colors.textSecondary }]}>
-              一个帮助你收藏和管理喜欢地点的应用
+              支持高德、腾讯、百度地图
             </Text>
           </View>
         </GlassCard>
@@ -318,7 +340,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   section: {
     marginBottom: 16,
@@ -327,36 +348,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
+    marginBottom: 8,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
     marginBottom: 16,
   },
-  apiKeyHint: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  apiLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 6,
-    marginTop: 8,
-  },
-  apiKeyInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  saveButton: {
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFF',
-  },
+  // 主题样式
   themeOptions: {
     flexDirection: 'row',
     gap: 12,
@@ -381,6 +379,116 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  // 提供商样式
+  providerCard: {
+    marginBottom: 12,
+    marginHorizontal: 16,
+    padding: 0,
+    overflow: 'hidden',
+  },
+  providerCardActive: {
+    borderWidth: 2,
+    borderColor: '#2196F3',
+  },
+  providerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  providerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  providerIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  providerText: {
+    flex: 1,
+  },
+  providerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  providerName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  activeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  activeBadgeText: {
+    fontSize: 12,
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  providerDesc: {
+    fontSize: 14,
+  },
+  expandIcon: {
+    fontSize: 16,
+  },
+  providerContent: {
+    padding: 16,
+    paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  // API 配置样式
+  apiItem: {
+    marginBottom: 16,
+  },
+  apiName: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  apiDescription: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  apiInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  // 操作按钮样式
+  providerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  activateButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  activateButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // 数据管理样式
   dataInfo: {
     marginBottom: 16,
   },
@@ -402,58 +510,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFF',
   },
-  districtInputRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  districtInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  queryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  queryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  districtList: {
-    borderTopWidth: 1,
-    marginTop: 4,
-  },
-  districtItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-  },
-  districtInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  districtName: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  districtLevel: {
-    fontSize: 12,
-  },
-  districtCoord: {
-    fontSize: 12,
-    fontFamily: 'monospace',
-  },
+  // 关于样式
   aboutContent: {
     alignItems: 'center',
   },
@@ -469,7 +526,6 @@ const styles = StyleSheet.create({
   aboutDescription: {
     fontSize: 14,
     textAlign: 'center',
-    lineHeight: 20,
   },
 });
 

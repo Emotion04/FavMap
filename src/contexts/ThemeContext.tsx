@@ -34,6 +34,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     theme: 'system',
     defaultIcon: '⭐',
     mapStyle: 'standard',
+    activeProvider: 'amap',
   });
 
   // 加载设置

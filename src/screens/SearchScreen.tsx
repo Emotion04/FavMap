@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
-import { AMapService } from '../services/amap';
+import { MapServiceFactory } from '../services/mapServiceFactory';
 import SearchBar from '../components/SearchBar';
 import GlassCard from '../components/GlassCard';
 import { SearchResult, FavoritePlace } from '../types';
@@ -26,10 +26,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
 
     setLoading(true);
     try {
-      const data = await AMapService.searchKeyword(query);
+      const mapService = await MapServiceFactory.getService();
+      const data = await mapService.searchKeyword(query);
       setResults(data);
+
       if (data.length === 0) {
-        // 未找到结果，可能是 API Key 未配置或搜索无结果
+        Alert.alert('提示', '未找到结果，请检查 API Key 配置');
       }
     } catch (error) {
       console.error('搜索失败:', error);
@@ -53,7 +55,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
     }
 
     // 获取地铁站信息
-    const subwayStations = await AMapService.searchNearbySubway(
+    const mapService = await MapServiceFactory.getService();
+    const subwayStations = await mapService.searchNearbySubway(
       result.coordinate.latitude,
       result.coordinate.longitude
     );

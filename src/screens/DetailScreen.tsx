@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Linking, Alert } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
-import { AMapService } from '../services/amap';
+import { MapServiceFactory } from '../services/mapServiceFactory';
 import { ShareService } from '../services/share';
 import GlassCard from '../components/GlassCard';
 import { FavoritePlace, SubwayStation } from '../types';
@@ -33,7 +33,8 @@ const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) =>
   const loadSubwayStations = async () => {
     setLoadingSubway(true);
     try {
-      const stations = await AMapService.searchNearbySubway(
+      const mapService = await MapServiceFactory.getService();
+      const stations = await mapService.searchNearbySubway(
         place.coordinate.latitude,
         place.coordinate.longitude
       );

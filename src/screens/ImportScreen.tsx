@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, TextInput,
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import GlassCard from '../components/GlassCard';
-import { AMapService } from '../services/amap';
+import { MapServiceFactory } from '../services/mapServiceFactory';
 import { FavoritePlace } from '../types';
 import { generateId } from '../utils/helpers';
 
@@ -34,16 +34,18 @@ const ImportScreen: React.FC<ImportScreenProps> = ({ onBack }) => {
       let success = 0;
       let failed = 0;
 
+      const mapService = await MapServiceFactory.getService();
+
       for (const line of lines) {
         try {
           // 搜索地点
-          const searchResults = await AMapService.searchKeyword(line.trim());
+          const searchResults = await mapService.searchKeyword(line.trim());
 
           if (searchResults.length > 0) {
             const place = searchResults[0];
 
             // 获取地铁站信息
-            const subwayStations = await AMapService.searchNearbySubway(
+            const subwayStations = await mapService.searchNearbySubway(
               place.coordinate.latitude,
               place.coordinate.longitude
             );

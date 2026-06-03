@@ -28,7 +28,9 @@
 - **语言**: TypeScript
 - **状态管理**: useState + Context
 - **本地存储**: AsyncStorage
-- **地图服务**: 高德原生 SDK (移动端) + 高德 JS API v2.0 (Web)
+- **地图服务**: 支持高德、腾讯、百度地图
+  - 移动端: 各地图原生 SDK
+  - Web: 高德 JS API v2.0 / 腾讯地图 JS API / 百度地图 JS API
 - **导航**: React Navigation
 - **UI 组件**: 自定义组件（液态玻璃效果）
 
@@ -56,34 +58,40 @@ npx expo start
 
 ### 配置
 
-Web 版需要配置三种高德凭证（移动端仅需 Web 服务 Key）：
+应用支持三种地图提供商，可在设置页面配置：
 
-1. **高德地图 API Key**
-   - 访问 [高德开放平台控制台](https://console.amap.com/)
-   - 创建应用，申请以下两种 Key：
+#### 高德地图
 
-   | 凭证 | 平台类型 | 用途 |
-   |------|----------|------|
-   | Key | **Web端(JS API)** | 地图渲染（瓦片、交互） |
-   | 安全密钥 | 与 JS API Key 配套 | JS API v2.0 鉴权 |
-   | Key | **Web服务** | REST API（地点搜索、地理编码） |
+| Key 类型 | 用途 | 获取方式 |
+|----------|------|----------|
+| JS API Key | Web 端地图渲染 | [高德开放平台](https://console.amap.com/) |
+| 安全密钥 | JS API v2.0 鉴权 | 随 JS API Key 一起申请 |
+| Web 服务 Key | 搜索、地理编码 | 同上 |
 
-   > 自 2021 年 12 月起，JS API v2.0 强制要求安全密钥。详见 [高德安全策略](https://lbs.amap.com/api/javascript-api-v2/guide/abc/security)。
+#### 腾讯地图
 
-2. 在应用的"设置"页面中分别填入对应的 Key 和安全密钥
+| Key 类型 | 用途 | 获取方式 |
+|----------|------|----------|
+| API Key | 地图渲染和搜索 | [腾讯位置服务](https://lbs.qq.com/) |
+
+#### 百度地图
+
+| Key 类型 | 用途 | 获取方式 |
+|----------|------|----------|
+| AK (Access Key) | 地图渲染和搜索 | [百度地图开放平台](https://lbsyun.baidu.com/) |
 
 ### 平台支持
 
 | 功能 | Web | iOS | Android |
 |------|-----|-----|---------|
-| 地图显示 | ✅ (3D) | ✅ | ✅ |
+| 地图显示 | ✅ | ✅ | ✅ |
 | 地点搜索 | ✅ | ✅ | ✅ |
 | 收藏管理 | ✅ | ✅ | ✅ |
 | 定位功能 | ❌ | ✅ | ✅ |
 | 深色模式 | ✅ | ✅ | ✅ |
 | 社交分享 | ❌ | ✅ | ✅ |
 
-> Web 版地图使用高德 JS API v2.0 (WebGL 3D)，需要配置 JS API Key + 安全密钥。搜索使用 Web 服务 Key。
+> Web 版默认使用高德 JS API v2.0，可在设置中切换到腾讯或百度地图。
 
 ## 项目结构
 
@@ -94,7 +102,9 @@ FavMap/
 │   │   ├── GlassCard.tsx    # 液态玻璃卡片
 │   │   ├── MapMarker.tsx    # 地图标记
 │   │   ├── SearchBar.tsx    # 搜索栏
-│   │   └── WebMap.tsx       # Web 地图组件（高德 JS API v2.0）
+│   │   └── WebMap.tsx       # Web 地图组件
+│   ├── config/              # 配置文件
+│   │   └── apiConfig.ts     # 地图提供商配置
 │   ├── screens/             # 页面
 │   │   ├── MapScreen.tsx    # 地图主页面
 │   │   ├── SearchScreen.tsx # 搜索页面
@@ -107,6 +117,8 @@ FavMap/
 │   │   └── ThemeContext.tsx
 │   ├── services/            # 服务层
 │   │   ├── amap.ts          # 高德 API
+│   │   ├── apiStorage.ts    # API 配置存储
+│   │   ├── mapServiceFactory.ts # 地图服务工厂
 │   │   ├── storage.ts       # 本地存储
 │   │   └── share.ts         # 分享功能
 │   ├── types/               # TypeScript 类型定义

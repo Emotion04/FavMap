@@ -78,6 +78,7 @@ export const SettingsStorage = {
             theme: 'system',
             defaultIcon: DEFAULT_ICON,
             mapStyle: 'standard',
+            activeProvider: 'amap',
           };
     } catch (error) {
       console.error('获取设置失败:', error);
@@ -85,6 +86,7 @@ export const SettingsStorage = {
         theme: 'system',
         defaultIcon: DEFAULT_ICON,
         mapStyle: 'standard',
+        activeProvider: 'amap',
       };
     }
   },
