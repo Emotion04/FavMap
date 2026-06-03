@@ -77,11 +77,45 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
         const mapService = await MapServiceFactory.getService();
         const address = await mapService.reverseGeocode(location.latitude, location.longitude);
         if (address) {
-          // 从地址中提取城市名（如"北京市朝阳区..." -> "北京"）
-          const cityMatch = address.match(/^(.*?[市州盟])/);
-          if (cityMatch) {
-            setCurrentCity(cityMatch[1]);
-            setCity(cityMatch[1]);
+          console.log('获取到地址:', address);
+
+          // 从地址中提取城市名（如"广东省广州市天河区..." -> "广州"）
+          let cityName = '';
+
+          // 尝试匹配"XX市"格式（直辖市、普通城市）
+          const directCityMatch = address.match(/([^\s省]+?)市/);
+          if (directCityMatch) {
+            cityName = directCityMatch[1];
+          }
+
+          // 如果没匹配到，尝试匹配"XX州"格式（自治州）
+          if (!cityName) {
+            const stateMatch = address.match(/([^\s省]+?)州/);
+            if (stateMatch) {
+              cityName = stateMatch[1] + '州';
+            }
+          }
+
+          // 如果还没匹配到，尝试匹配"XX盟"格式（盟）
+          if (!cityName) {
+            const leagueMatch = address.match(/([^\s省]+?)盟/);
+            if (leagueMatch) {
+              cityName = leagueMatch[1] + '盟';
+            }
+          }
+
+          // 如果还是没匹配到，取地址的第二部分（假设格式是"省 市 区"）
+          if (!cityName) {
+            const parts = address.split(/[省市区县]/);
+            if (parts.length >= 2) {
+              cityName = parts[1];
+            }
+          }
+
+          if (cityName) {
+            console.log('提取的城市名:', cityName);
+            setCurrentCity(cityName);
+            setCity(cityName);
           }
         }
       }
