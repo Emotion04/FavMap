@@ -1,5 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, TextInput, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Text,
+  Alert,
+  TextInput,
+  Platform,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
@@ -30,11 +39,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
     try {
       const provider = await ApiStorageService.getActiveProvider();
       setActiveProvider(provider);
-
       const configs = await ApiStorageService.getAllProviderConfigs();
       setProviderConfigs(configs);
-
-      // 默认展开当前活跃的提供商
       setExpandedProvider(provider);
     } catch (error) {
       console.error('加载配置失败:', error);
@@ -42,18 +48,18 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
   };
 
   // 切换活跃提供商
-  const handleSetActiveProvider = async (provider: MapProvider) => {
+  const handleSetActiveProvider = useCallback(async (provider: MapProvider) => {
     try {
       await ApiStorageService.setActiveProvider(provider);
       setActiveProvider(provider);
-      Alert.alert('成功', `已切换到${MAP_PROVIDERS.find(p => p.id === provider)?.name}`);
+      Alert.alert('成功', `已切换到${MAP_PROVIDERS.find((p) => p.id === provider)?.name}`);
     } catch (error) {
       Alert.alert('错误', '切换失败');
     }
-  };
+  }, []);
 
   // 更新 API Key
-  const handleUpdateApiKey = (providerId: MapProvider, apiId: string, value: string) => {
+  const handleUpdateApiKey = useCallback((providerId: MapProvider, apiId: string, value: string) => {
     setProviderConfigs((prev) =>
       prev.map((provider) =>
         provider.id === providerId
@@ -66,10 +72,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           : provider
       )
     );
-  };
+  }, []);
 
   // 更新安全密钥
-  const handleUpdateSecurityCode = (providerId: MapProvider, apiId: string, value: string) => {
+  const handleUpdateSecurityCode = useCallback((providerId: MapProvider, apiId: string, value: string) => {
     setProviderConfigs((prev) =>
       prev.map((provider) =>
         provider.id === providerId
@@ -82,10 +88,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           : provider
       )
     );
-  };
+  }, []);
 
   // 保存提供商配置
-  const handleSaveProviderConfig = async (provider: MapProviderConfig) => {
+  const handleSaveProviderConfig = useCallback(async (provider: MapProviderConfig) => {
     setSaving(true);
     try {
       await ApiStorageService.saveProviderConfig(provider);
@@ -95,23 +101,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
     } finally {
       setSaving(false);
     }
-  };
+  }, []);
 
   // 导出数据
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     setExporting(true);
     try {
       const json = await exportFavorites();
       if (Platform.OS === 'web') {
-        // Web 版本复制到剪贴板
         await navigator.clipboard.writeText(json);
         Alert.alert('成功', '数据已复制到剪贴板');
       } else {
         const { Share } = require('react-native');
-        await Share.share({
-          title: 'FavMap 收藏数据',
-          message: json,
-        });
+        await Share.share({ title: 'FavMap 收藏数据', message: json });
       }
     } catch (error) {
       console.error('导出失败:', error);
@@ -119,16 +121,22 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
     } finally {
       setExporting(false);
     }
-  };
+  }, [exportFavorites]);
 
-  // 渲染 API 配置项
-  const renderApiConfig = (provider: MapProviderConfig, api: ApiConfig) => (
+  // 渲染 API 配置项（液态玻璃效果）
+  const renderApiConfig = useCallback((provider: MapProviderConfig, api: ApiConfig) => (
     <View key={api.id} style={styles.apiItem}>
       <Text style={[styles.apiName, { color: colors.text }]}>{api.name}</Text>
       <Text style={[styles.apiDescription, { color: colors.textSecondary }]}>{api.description}</Text>
-
       <TextInput
-        style={[styles.apiInput, { color: colors.text, borderColor: colors.border }]}
+        style={[
+          styles.apiInput,
+          {
+            color: colors.text,
+            borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+          },
+        ]}
         value={api.apiKey}
         onChangeText={(value) => handleUpdateApiKey(provider.id, api.id, value)}
         placeholder={`输入 ${api.name}`}
@@ -136,16 +144,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
         autoCapitalize="none"
         autoCorrect={false}
       />
-
-      {/* 高德地图安全密钥 */}
       {api.id === 'amap_js' && (
         <>
           <Text style={[styles.apiName, { color: colors.text, marginTop: 12 }]}>安全密钥</Text>
-          <Text style={[styles.apiDescription, { color: colors.textSecondary }]}>
-            JS API v2.0 鉴权必需
-          </Text>
+          <Text style={[styles.apiDescription, { color: colors.textSecondary }]}>JS API v2.0 鉴权必需</Text>
           <TextInput
-            style={[styles.apiInput, { color: colors.text, borderColor: colors.border }]}
+            style={[
+              styles.apiInput,
+              {
+                color: colors.text,
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+              },
+            ]}
             value={api.securityCode || ''}
             onChangeText={(value) => handleUpdateSecurityCode(provider.id, api.id, value)}
             placeholder="输入安全密钥"
@@ -156,22 +167,31 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
         </>
       )}
     </View>
-  );
+  ), [colors, isDark, handleUpdateApiKey, handleUpdateSecurityCode]);
 
-  // 渲染提供商卡片
-  const renderProviderCard = (provider: MapProviderConfig) => {
+  // 渲染提供商卡片（液态玻璃效果）
+  const renderProviderCard = useCallback((provider: MapProviderConfig) => {
     const isActive = activeProvider === provider.id;
     const isExpanded = expandedProvider === provider.id;
 
     return (
-      <GlassCard
+      <BlurView
         key={provider.id}
-        style={{
-          ...styles.providerCard,
-          ...(isActive ? styles.providerCardActive : {}),
-        }}
+        intensity={isDark ? 30 : 50}
+        tint={isDark ? 'dark' : 'light'}
+        style={[
+          styles.providerCard,
+          isActive && styles.providerCardActive,
+          {
+            borderColor: isActive
+              ? colors.primary
+              : isDark
+              ? 'rgba(255,255,255,0.1)'
+              : 'rgba(255,255,255,0.4)',
+            backgroundColor: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.7)',
+          },
+        ]}
       >
-        {/* 提供商头部 */}
         <TouchableOpacity
           onPress={() => setExpandedProvider(isExpanded ? null : provider.id)}
           style={styles.providerHeader}
@@ -187,7 +207,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
                   </View>
                 )}
               </View>
-              <Text style={[styles.providerDesc, { color: colors.textSecondary }]}>{provider.description}</Text>
+              <Text style={[styles.providerDesc, { color: colors.textSecondary }]}>
+                {provider.description}
+              </Text>
             </View>
           </View>
           <Text style={[styles.expandIcon, { color: colors.textSecondary }]}>
@@ -195,96 +217,108 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
           </Text>
         </TouchableOpacity>
 
-        {/* 展开的配置区域 */}
         {isExpanded && (
           <View style={styles.providerContent}>
-            {/* API 配置 */}
             {provider.apis.map((api) => renderApiConfig(provider, api))}
-
-            {/* 操作按钮 */}
             <View style={styles.providerActions}>
               <TouchableOpacity
                 onPress={() => handleSaveProviderConfig(provider)}
                 style={[styles.saveButton, { backgroundColor: colors.primary }]}
                 disabled={saving}
               >
-                <Text style={styles.saveButtonText}>
-                  {saving ? '保存中...' : '保存配置'}
-                </Text>
+                <Text style={styles.saveButtonText}>{saving ? '保存中...' : '保存配置'}</Text>
               </TouchableOpacity>
-
               {!isActive && (
                 <TouchableOpacity
                   onPress={() => handleSetActiveProvider(provider.id)}
                   style={[styles.activateButton, { borderColor: colors.primary }]}
                 >
-                  <Text style={[styles.activateButtonText, { color: colors.primary }]}>
-                    设为默认
-                  </Text>
+                  <Text style={[styles.activateButtonText, { color: colors.primary }]}>设为默认</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
         )}
-      </GlassCard>
+      </BlurView>
     );
-  };
+  }, [activeProvider, expandedProvider, colors, isDark, saving, renderApiConfig, handleSaveProviderConfig, handleSetActiveProvider]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 头部 */}
-      <View style={styles.header}>
+      {/* 头部（液态玻璃效果） */}
+      <BlurView
+        intensity={isDark ? 40 : 60}
+        tint={isDark ? 'dark' : 'light'}
+        style={[
+          styles.header,
+          {
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
+            backgroundColor: isDark ? 'rgba(20,20,20,0.9)' : 'rgba(255,255,255,0.9)',
+          },
+        ]}
+      >
         <Text style={[styles.headerTitle, { color: colors.text }]}>设置</Text>
-      </View>
+      </BlurView>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 主题设置 */}
-        <GlassCard style={styles.section}>
+        {/* 主题设置（液态玻璃效果） */}
+        <BlurView
+          intensity={isDark ? 30 : 50}
+          tint={isDark ? 'dark' : 'light'}
+          style={[
+            styles.section,
+            {
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.4)',
+              backgroundColor: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.7)',
+            },
+          ]}
+        >
           <Text style={[styles.sectionTitle, { color: colors.text }]}>🎨 主题</Text>
           <View style={styles.themeOptions}>
-            <TouchableOpacity
-              onPress={() => updateTheme('light')}
-              style={[styles.themeOption, themeSetting === 'light' && styles.themeOptionSelected]}
-            >
-              <Text style={styles.themeIcon}>☀️</Text>
-              <Text style={[styles.themeText, { color: colors.text }]}>浅色</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => updateTheme('dark')}
-              style={[styles.themeOption, themeSetting === 'dark' && styles.themeOptionSelected]}
-            >
-              <Text style={styles.themeIcon}>🌙</Text>
-              <Text style={[styles.themeText, { color: colors.text }]}>深色</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => updateTheme('system')}
-              style={[styles.themeOption, themeSetting === 'system' && styles.themeOptionSelected]}
-            >
-              <Text style={styles.themeIcon}>⚙️</Text>
-              <Text style={[styles.themeText, { color: colors.text }]}>跟随系统</Text>
-            </TouchableOpacity>
+            {(['light', 'dark', 'system'] as const).map((t) => (
+              <TouchableOpacity
+                key={t}
+                onPress={() => updateTheme(t)}
+                style={[
+                  styles.themeOption,
+                  themeSetting === t && styles.themeOptionSelected,
+                ]}
+              >
+                <Text style={styles.themeIcon}>
+                  {t === 'light' ? '☀️' : t === 'dark' ? '🌙' : '⚙️'}
+                </Text>
+                <Text style={[styles.themeText, { color: colors.text }]}>
+                  {t === 'light' ? '浅色' : t === 'dark' ? '深色' : '跟随系统'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        </GlassCard>
+        </BlurView>
 
         {/* 地图 API 配置 */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text, paddingHorizontal: 16 }]}>
-            🗺️ 地图 API 配置
-          </Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, paddingHorizontal: 16 }]}>
+        <View style={styles.sectionContainer}>
+          <Text style={[styles.sectionContainerTitle, { color: colors.text }]}>🗺️ 地图 API 配置</Text>
+          <Text style={[styles.sectionContainerSubtitle, { color: colors.textSecondary }]}>
             选择地图提供商并配置 API Key
           </Text>
-
           {providerConfigs.map(renderProviderCard)}
         </View>
 
-        {/* 数据管理 */}
-        <GlassCard style={styles.section}>
+        {/* 数据管理（液态玻璃效果） */}
+        <BlurView
+          intensity={isDark ? 30 : 50}
+          tint={isDark ? 'dark' : 'light'}
+          style={[
+            styles.section,
+            {
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.4)',
+              backgroundColor: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.7)',
+            },
+          ]}
+        >
           <Text style={[styles.sectionTitle, { color: colors.text }]}>📦 数据管理</Text>
           <View style={styles.dataInfo}>
-            <Text style={[styles.dataText, { color: colors.text }]}>
-              收藏数量：{favorites.length} 个
-            </Text>
+            <Text style={[styles.dataText, { color: colors.text }]}>收藏数量：{favorites.length} 个</Text>
           </View>
           <View style={styles.dataActions}>
             <TouchableOpacity
@@ -292,9 +326,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
               style={[styles.dataButton, { backgroundColor: colors.primary }]}
               disabled={exporting}
             >
-              <Text style={styles.dataButtonText}>
-                {exporting ? '导出中...' : '导出数据'}
-              </Text>
+              <Text style={styles.dataButtonText}>{exporting ? '导出中...' : '导出数据'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={onImportPress}
@@ -303,23 +335,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onImportPress }) => {
               <Text style={styles.dataButtonText}>导入数据</Text>
             </TouchableOpacity>
           </View>
-        </GlassCard>
+        </BlurView>
 
-        {/* 关于 */}
-        <GlassCard style={styles.section}>
+        {/* 关于（液态玻璃效果） */}
+        <BlurView
+          intensity={isDark ? 30 : 50}
+          tint={isDark ? 'dark' : 'light'}
+          style={[
+            styles.section,
+            {
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.4)',
+              backgroundColor: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.7)',
+            },
+          ]}
+        >
           <Text style={[styles.sectionTitle, { color: colors.text }]}>ℹ️ 关于</Text>
           <View style={styles.aboutContent}>
-            <Text style={[styles.aboutText, { color: colors.text }]}>
-              FavMap - 收藏地图应用
-            </Text>
-            <Text style={[styles.aboutVersion, { color: colors.textSecondary }]}>
-              版本 1.0.0
-            </Text>
+            <Text style={[styles.aboutText, { color: colors.text }]}>FavMap - 收藏地图应用</Text>
+            <Text style={[styles.aboutVersion, { color: colors.textSecondary }]}>版本 1.0.0</Text>
             <Text style={[styles.aboutDescription, { color: colors.textSecondary }]}>
               支持高德、腾讯、百度地图
             </Text>
           </View>
-        </GlassCard>
+        </BlurView>
       </ScrollView>
     </View>
   );
@@ -329,10 +367,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  // 头部（液态玻璃）
   header: {
     paddingHorizontal: 16,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: 16,
+    borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -341,20 +381,36 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  // 区块样式（液态玻璃）
   section: {
     marginBottom: 16,
+    marginHorizontal: 16,
     padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  sectionSubtitle: {
-    fontSize: 14,
+  // 区块容器
+  sectionContainer: {
     marginBottom: 16,
   },
-  // 主题样式
+  sectionContainerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+    paddingHorizontal: 16,
+  },
+  sectionContainerSubtitle: {
+    fontSize: 14,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  // 主题选项
   themeOptions: {
     flexDirection: 'row',
     gap: 12,
@@ -379,16 +435,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  // 提供商样式
+  // 提供商卡片（液态玻璃）
   providerCard: {
     marginBottom: 12,
     marginHorizontal: 16,
-    padding: 0,
+    borderRadius: 16,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   providerCardActive: {
     borderWidth: 2,
-    borderColor: '#2196F3',
   },
   providerHeader: {
     flexDirection: 'row',
@@ -440,7 +496,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
-  // API 配置样式
+  // API 配置项
   apiItem: {
     marginBottom: 16,
   },
@@ -455,12 +511,12 @@ const styles = StyleSheet.create({
   },
   apiInput: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
   },
-  // 操作按钮样式
+  // 操作按钮
   providerActions: {
     flexDirection: 'row',
     gap: 12,
@@ -469,7 +525,7 @@ const styles = StyleSheet.create({
   saveButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
   },
   saveButtonText: {
@@ -480,7 +536,7 @@ const styles = StyleSheet.create({
   activateButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     borderWidth: 2,
   },
@@ -488,7 +544,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // 数据管理样式
+  // 数据管理
   dataInfo: {
     marginBottom: 16,
   },
@@ -510,7 +566,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFF',
   },
-  // 关于样式
+  // 关于
   aboutContent: {
     alignItems: 'center',
   },
