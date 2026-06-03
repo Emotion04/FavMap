@@ -15,7 +15,7 @@ import { BlurView } from 'expo-blur';
 import * as Location from 'expo-location';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useTheme } from '../contexts/ThemeContext';
-import GlassCard from '../components/GlassCard';
+import { GlassCard } from '../components/glass';
 import WebMap from '../components/WebMap';
 import { FavoritePlace } from '../types';
 import { DEFAULT_CENTER } from '../utils/constants';

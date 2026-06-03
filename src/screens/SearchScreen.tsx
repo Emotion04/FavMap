@@ -3,8 +3,7 @@ import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator, 
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { MapServiceFactory } from '../services/mapServiceFactory';
-import SearchBar from '../components/SearchBar';
-import GlassCard from '../components/GlassCard';
+import { GlassInput, GlassCard } from '../components/glass';
 import { SearchResult, FavoritePlace } from '../types';
 import { generateId } from '../utils/helpers';
 
@@ -124,11 +123,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
         <View style={styles.searchInput}>
-          <SearchBar
+          <GlassInput
             value={query}
             onChangeText={setQuery}
-            onSubmit={handleSearch}
+            onSubmitEditing={handleSearch}
             placeholder="搜索地点..."
+            returnKeyType="search"
+            icon={<Text>🔍</Text>}
           />
         </View>
       </View>

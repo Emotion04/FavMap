@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, TextInput, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
-import GlassCard from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton } from '../components/glass';
 import { MapServiceFactory } from '../services/mapServiceFactory';
 import { FavoritePlace } from '../types';
 import { generateId } from '../utils/helpers';

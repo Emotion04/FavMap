@@ -40,12 +40,40 @@ npm test
 ```
 src/
 ├── components/          # 可复用组件
+│   └── glass/          # 液态玻璃组件库
 ├── screens/             # 页面
 ├── contexts/            # Context 状态管理
 ├── services/            # 服务层（高德 API、存储、分享）
 ├── types/               # TypeScript 类型定义
 └── utils/               # 工具函数和常量
 ```
+
+## 设计系统
+
+### Liquid Glass 设计规范
+
+本项目遵循 iOS 26 Liquid Glass 设计规范，所有 UI 组件使用液态玻璃效果。
+
+**核心组件**:
+- `GlassCard` - 液态玻璃卡片
+- `GlassButton` - 液态玻璃按钮
+- `GlassInput` - 液态玻璃输入框
+- `GlassHeader` - 液态玻璃头部
+- `GlassBottomSheet` - 液态玻璃底部弹出
+- `GlassTabBar` - 液态玻璃标签栏
+- `GlassBadge` - 液态玻璃徽章
+- `GlassModal` - 液态玻璃弹窗
+- `GlassToast` - 液态玻璃提示
+- `GlassFAB` - 液态玻璃浮动按钮
+
+**设计原则**:
+- 半透明模糊背景
+- 柔和的圆角（16-24px）
+- 微妙的边框
+- 光影效果
+- 动态响应
+
+详见 `.claude/skills/liquid-glass-design.md`
 
 ## Agent skills
 

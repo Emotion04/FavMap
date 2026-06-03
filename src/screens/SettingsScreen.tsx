@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, TextInput,
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
-import GlassCard from '../components/GlassCard';
+import { GlassCard, GlassInput, GlassButton } from '../components/glass';
 import { MapProvider, MapProviderConfig, ApiConfig } from '../types';
 import { ApiStorageService } from '../services/apiStorage';
 import { MAP_PROVIDERS } from '../config/apiConfig';

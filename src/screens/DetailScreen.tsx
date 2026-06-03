@@ -4,7 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { MapServiceFactory } from '../services/mapServiceFactory';
 import { ShareService } from '../services/share';
-import GlassCard from '../components/GlassCard';
+import { GlassCard, GlassButton } from '../components/glass';
 import { FavoritePlace, SubwayStation } from '../types';
 import { formatDistance, formatWalkingTime, formatDate } from '../utils/helpers';
 import { FAVORITE_ICONS } from '../utils/constants';
