@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { BlurView } from 'expo-blur';
 import { FavoritesProvider } from './src/contexts/FavoritesContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import MapScreen from './src/screens/MapScreen';
@@ -105,48 +106,60 @@ function AppContent() {
         {renderScreen()}
       </View>
 
-      {/* 底部标签栏 */}
+      {/* 底部悬浮标签栏（液态玻璃效果） */}
       {showTabBar && (
-        <View style={[styles.tabBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => setCurrentScreen('map')}
+        <View style={styles.tabBarContainer}>
+          <BlurView
+            intensity={isDark ? 30 : 50}
+            tint={isDark ? 'dark' : 'light'}
+            style={[
+              styles.tabBar,
+              {
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
+                backgroundColor: isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.6)',
+              },
+            ]}
           >
-            <Text style={styles.tabIcon}>🗺️</Text>
-            <Text style={[styles.tabLabel, { color: currentScreen === 'map' ? colors.primary : colors.textSecondary }]}>
-              地图
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.tabItem}
+              onPress={() => setCurrentScreen('map')}
+            >
+              <Text style={styles.tabIcon}>🗺️</Text>
+              <Text style={[styles.tabLabel, { color: currentScreen === 'map' ? colors.primary : colors.textSecondary }]}>
+                地图
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => setCurrentScreen('search')}
-          >
-            <Text style={styles.tabIcon}>🔍</Text>
-            <Text style={[styles.tabLabel, { color: currentScreen === 'search' ? colors.primary : colors.textSecondary }]}>
-              搜索
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.tabItem}
+              onPress={() => setCurrentScreen('search')}
+            >
+              <Text style={styles.tabIcon}>🔍</Text>
+              <Text style={[styles.tabLabel, { color: currentScreen === 'search' ? colors.primary : colors.textSecondary }]}>
+                搜索
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => setCurrentScreen('map')}
-          >
-            <Text style={styles.tabIcon}>⭐</Text>
-            <Text style={[styles.tabLabel, { color: colors.textSecondary }]}>
-              收藏
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.tabItem}
+              onPress={() => setCurrentScreen('map')}
+            >
+              <Text style={styles.tabIcon}>⭐</Text>
+              <Text style={[styles.tabLabel, { color: colors.textSecondary }]}>
+                收藏
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => setCurrentScreen('settings')}
-          >
-            <Text style={styles.tabIcon}>⚙️</Text>
-            <Text style={[styles.tabLabel, { color: currentScreen === 'settings' ? colors.primary : colors.textSecondary }]}>
-              设置
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.tabItem}
+              onPress={() => setCurrentScreen('settings')}
+            >
+              <Text style={styles.tabIcon}>⚙️</Text>
+              <Text style={[styles.tabLabel, { color: currentScreen === 'settings' ? colors.primary : colors.textSecondary }]}>
+                设置
+              </Text>
+            </TouchableOpacity>
+          </BlurView>
         </View>
       )}
     </View>
@@ -171,11 +184,25 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  tabBarContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
   tabBar: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    paddingBottom: 20,
-    paddingTop: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
   },
   tabItem: {
     flex: 1,
