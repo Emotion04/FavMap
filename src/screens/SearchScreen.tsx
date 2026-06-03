@@ -16,7 +16,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { MapServiceFactory } from '../services/mapServiceFactory';
 import { SearchResult, FavoritePlace } from '../types';
-import { generateId, calculateDistance, formatDistance } from '../utils/helpers';
+import { generateId, calculateDistance } from '../utils/helpers';
 import { DEFAULT_CENTER } from '../utils/constants';
 
 interface SearchScreenProps {
@@ -44,7 +44,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
       let location: { latitude: number; longitude: number } | null = null;
 
       if (Platform.OS === 'web') {
-        // Web 版本
         if ('geolocation' in navigator) {
           location = await new Promise((resolve) => {
             navigator.geolocation.getCurrentPosition(
@@ -60,7 +59,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
           });
         }
       } else {
-        // 移动版本
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const loc = await Location.getCurrentPositionAsync({});
@@ -73,45 +71,27 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
 
       if (location) {
         setUserLocation(location);
-        // 获取城市名称
         const mapService = await MapServiceFactory.getService();
         const address = await mapService.reverseGeocode(location.latitude, location.longitude);
         if (address) {
           console.log('获取到地址:', address);
-
-          // 从地址中提取城市名（如"广东省广州市天河区..." -> "广州"）
           let cityName = '';
-
-          // 尝试匹配"XX市"格式（直辖市、普通城市）
           const directCityMatch = address.match(/([^\s省]+?)市/);
           if (directCityMatch) {
             cityName = directCityMatch[1];
           }
-
-          // 如果没匹配到，尝试匹配"XX州"格式（自治州）
           if (!cityName) {
             const stateMatch = address.match(/([^\s省]+?)州/);
             if (stateMatch) {
               cityName = stateMatch[1] + '州';
             }
           }
-
-          // 如果还没匹配到，尝试匹配"XX盟"格式（盟）
           if (!cityName) {
             const leagueMatch = address.match(/([^\s省]+?)盟/);
             if (leagueMatch) {
               cityName = leagueMatch[1] + '盟';
             }
           }
-
-          // 如果还是没匹配到，取地址的第二部分（假设格式是"省 市 区"）
-          if (!cityName) {
-            const parts = address.split(/[省市区县]/);
-            if (parts.length >= 2) {
-              cityName = parts[1];
-            }
-          }
-
           if (cityName) {
             console.log('提取的城市名:', cityName);
             setCurrentCity(cityName);
@@ -124,12 +104,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
     }
   };
 
-  // 计算两点之间的距离（公里）
   const getDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    return calculateDistance(lat1, lon1, lat2, lon2) / 1000; // 转换为公里
+    return calculateDistance(lat1, lon1, lat2, lon2) / 1000;
   }, []);
 
-  // 搜索地点 - 支持多页结果和按距离排序
   const handleSearch = useCallback(async () => {
     if (!query.trim()) {
       Alert.alert('提示', '请输入搜索关键词');
@@ -144,20 +122,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
       console.log('=== 开始搜索 ===');
       console.log('关键词:', query);
       console.log('城市:', city || '全国');
-      console.log('用户位置:', userLocation);
 
-      // 获取多页结果（最多 3 页，约 75 条）
       const data = await mapService.searchKeyword(query, city || undefined, 3);
       console.log('搜索完成，结果数量:', data.length);
 
-      if (data.length > 0) {
-        console.log('前3个结果:');
-        data.slice(0, 3).forEach((item, i) => {
-          console.log(`  ${i + 1}. ${item.name} - ${item.address}`);
-        });
-      }
-
-      // 按距离排序（如果有用户位置）
       let sortedResults = data;
       if (userLocation) {
         sortedResults = data.map((item) => ({
@@ -171,7 +139,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
         })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
       }
 
-      console.log('排序后结果:', sortedResults.length, '条');
       setResults(sortedResults);
 
       if (sortedResults.length === 0) {
@@ -179,20 +146,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
       }
     } catch (error: any) {
       console.error('搜索失败:', error);
-
-      // 提供更详细的错误信息
-      let errorMessage = '搜索失败，请检查网络连接和 API Key 配置';
-      if (error.message) {
-        errorMessage = error.message;
-      }
-
-      Alert.alert('搜索错误', errorMessage);
+      Alert.alert('搜索错误', error.message || '搜索失败');
     } finally {
       setLoading(false);
     }
   }, [query, city, userLocation, getDistance]);
 
-  // 收藏地点
   const handleFavorite = useCallback(async (result: SearchResult) => {
     const exists = favorites.some(
       (f) =>
@@ -226,7 +185,6 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
     }
   }, [favorites, addFavorite]);
 
-  // 查看详情
   const handleViewDetail = useCallback((result: SearchResult) => {
     onPlaceSelect({
       id: generateId(),
@@ -240,15 +198,14 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
     });
   }, [onPlaceSelect]);
 
-  // 渲染搜索结果（液态玻璃效果）
   const renderItem = ({ item }: { item: SearchResult & { distance?: number } }) => (
     <TouchableOpacity onPress={() => handleViewDetail(item)} activeOpacity={0.8}>
       <BlurView
-        intensity={isDark ? 30 : 50}
+        intensity={isDark ? 15 : 25}
         tint={isDark ? 'dark' : 'light'}
         style={[styles.resultCard, {
-          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.4)',
-          backgroundColor: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.7)',
+          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
+          backgroundColor: isDark ? 'rgba(20,20,20,0.4)' : 'rgba(255,255,255,0.4)',
         }]}
       >
         <View style={styles.resultContent}>
@@ -277,13 +234,13 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 搜索栏（液态玻璃效果） */}
+      {/* 搜索头部 */}
       <BlurView
-        intensity={isDark ? 40 : 60}
+        intensity={isDark ? 20 : 35}
         tint={isDark ? 'dark' : 'light'}
         style={[styles.searchHeader, {
-          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
-          backgroundColor: isDark ? 'rgba(20,20,20,0.9)' : 'rgba(255,255,255,0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
+          backgroundColor: isDark ? 'rgba(10,10,10,0.6)' : 'rgba(255,255,255,0.6)',
         }]}
       >
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -312,8 +269,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
         <TextInput
           style={[styles.cityInput, {
             color: colors.text,
-            borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
           }]}
           value={city}
           onChangeText={setCity}
@@ -377,7 +334,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.04)',
     borderRadius: 20,
     paddingHorizontal: 12,
   },
@@ -401,13 +358,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 14,
   },
-  cityButton: {
-    padding: 6,
-  },
-  cityButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  cityButton: { padding: 6 },
+  cityButtonText: { fontSize: 14, fontWeight: '500' },
   listContainer: { padding: 16 },
   resultCard: {
     marginBottom: 12,
@@ -420,11 +372,7 @@ const styles = StyleSheet.create({
   resultInfo: { flex: 1 },
   resultName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
   resultAddress: { fontSize: 14, marginBottom: 4 },
-  resultMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
+  resultMeta: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   resultRating: { fontSize: 14, color: '#FFD700' },
   resultDistance: { fontSize: 13 },
   favoriteButton: { padding: 8 },

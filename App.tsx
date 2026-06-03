@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { FavoritesProvider } from './src/contexts/FavoritesContext';
@@ -10,13 +10,72 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import ImportScreen from './src/screens/ImportScreen';
 import EditScreen from './src/screens/EditScreen';
 import { FavoritePlace } from './src/types';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// 底部标签栏配置
+const TAB_ITEMS = [
+  { key: 'map', label: '地图', icon: '🗺️' },
+  { key: 'search', label: '搜索', icon: '🔍' },
+  { key: 'favorites', label: '收藏', icon: '⭐' },
+  { key: 'settings', label: '设置', icon: '⚙️' },
+];
 
 // 主应用内容
 function AppContent() {
   const { colors, isDark } = useTheme();
   const [currentScreen, setCurrentScreen] = useState<'map' | 'search' | 'detail' | 'settings' | 'import' | 'edit'>('map');
   const [selectedPlace, setSelectedPlace] = useState<FavoritePlace | null>(null);
+
+  // 动画值 - 光球位置
+  const ballPosition = useRef(new Animated.Value(0)).current;
+  const ballScale = useRef(new Animated.Value(1)).current;
+  const ballOpacity = useRef(new Animated.Value(0.8)).current;
+
+  // 计算每个标签的位置
+  const tabWidth = (SCREEN_WIDTH - 64) / 4; // 减去左右边距
+
+  // 更新光球位置
+  useEffect(() => {
+    const tabIndex = TAB_ITEMS.findIndex((item) => {
+      if (item.key === 'favorites') return currentScreen === 'map';
+      return item.key === currentScreen;
+    });
+
+    if (tabIndex >= 0) {
+      Animated.spring(ballPosition, {
+        toValue: tabIndex * tabWidth + tabWidth / 2,
+        useNativeDriver: true,
+        bounciness: 15,
+        speed: 12,
+      }).start();
+    }
+  }, [currentScreen, tabWidth]);
+
+  // 处理标签点击
+  const handleTabPress = (key: string) => {
+    // 光球缩放动画
+    Animated.sequence([
+      Animated.timing(ballScale, {
+        toValue: 1.3,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(ballScale, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // 切换页面
+    if (key === 'favorites') {
+      setCurrentScreen('map');
+    } else {
+      setCurrentScreen(key as any);
+    }
+  };
 
   // 处理搜索按钮点击
   const handleSearchPress = () => {
@@ -109,56 +168,66 @@ function AppContent() {
       {/* 底部悬浮标签栏（液态玻璃效果） */}
       {showTabBar && (
         <View style={styles.tabBarContainer}>
+          {/* 液态玻璃背景 */}
           <BlurView
-            intensity={isDark ? 30 : 50}
+            intensity={isDark ? 20 : 30}
             tint={isDark ? 'dark' : 'light'}
             style={[
               styles.tabBar,
               {
-                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
-                backgroundColor: isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.6)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+                backgroundColor: isDark ? 'rgba(15,15,15,0.5)' : 'rgba(255,255,255,0.5)',
               },
             ]}
           >
-            <TouchableOpacity
-              style={styles.tabItem}
-              onPress={() => setCurrentScreen('map')}
-            >
-              <Text style={styles.tabIcon}>🗺️</Text>
-              <Text style={[styles.tabLabel, { color: currentScreen === 'map' ? colors.primary : colors.textSecondary }]}>
-                地图
-              </Text>
-            </TouchableOpacity>
+            {/* 光球指示器 */}
+            <Animated.View
+              style={[
+                styles.lightBall,
+                {
+                  transform: [
+                    { translateX: ballPosition },
+                    { scale: ballScale },
+                  ],
+                  opacity: ballOpacity,
+                },
+              ]}
+            />
 
-            <TouchableOpacity
-              style={styles.tabItem}
-              onPress={() => setCurrentScreen('search')}
-            >
-              <Text style={styles.tabIcon}>🔍</Text>
-              <Text style={[styles.tabLabel, { color: currentScreen === 'search' ? colors.primary : colors.textSecondary }]}>
-                搜索
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.tabItem}
-              onPress={() => setCurrentScreen('map')}
-            >
-              <Text style={styles.tabIcon}>⭐</Text>
-              <Text style={[styles.tabLabel, { color: colors.textSecondary }]}>
-                收藏
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.tabItem}
-              onPress={() => setCurrentScreen('settings')}
-            >
-              <Text style={styles.tabIcon}>⚙️</Text>
-              <Text style={[styles.tabLabel, { color: currentScreen === 'settings' ? colors.primary : colors.textSecondary }]}>
-                设置
-              </Text>
-            </TouchableOpacity>
+            {/* 标签项 */}
+            {TAB_ITEMS.map((item) => {
+              const isActive = item.key === currentScreen || (item.key === 'favorites' && currentScreen === 'map');
+              return (
+                <TouchableOpacity
+                  key={item.key}
+                  style={styles.tabItem}
+                  onPress={() => handleTabPress(item.key)}
+                  activeOpacity={0.7}
+                >
+                  <Animated.Text
+                    style={[
+                      styles.tabIcon,
+                      {
+                        transform: [{ scale: isActive ? 1.1 : 1 }],
+                      },
+                    ]}
+                  >
+                    {item.icon}
+                  </Animated.Text>
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      {
+                        color: isActive ? '#FFFFFF' : colors.textSecondary,
+                        fontWeight: isActive ? '600' : '400',
+                      },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </BlurView>
         </View>
       )}
@@ -193,27 +262,42 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    borderRadius: 24,
+    borderRadius: 28,
     borderWidth: 1,
     paddingVertical: 12,
     paddingHorizontal: 8,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowRadius: 24,
+    elevation: 15,
+    position: 'relative',
+  },
+  lightBall: {
+    position: 'absolute',
+    top: 4,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
     elevation: 10,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 1,
   },
   tabIcon: {
     fontSize: 24,
     marginBottom: 4,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
   },
 });

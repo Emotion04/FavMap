@@ -15,7 +15,6 @@ import { BlurView } from 'expo-blur';
 import * as Location from 'expo-location';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { GlassCard, GlassButton } from '../components/glass';
 import WebMap from '../components/WebMap';
 import { FavoritePlace } from '../types';
 import { DEFAULT_CENTER } from '../utils/constants';
@@ -33,12 +32,11 @@ interface MapScreenProps {
 const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) => {
   const { favorites } = useFavorites();
   const { colors, isDark } = useTheme();
-  const [selectedPlace, setSelectedPlace] = useState<FavoritePlace | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [cardPosition, setCardPosition] = useState<CardPosition>('half');
 
-  // 动画值 - 卡片从底部偏移量
+  // 动画值
   const cardTranslateY = useRef(new Animated.Value(height * 0.5)).current;
   const lastOffset = useRef(height * 0.5);
 
@@ -56,10 +54,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
       onPanResponderMove: (_, gestureState) => {
         const minValue = height * 0.15;
         const maxValue = height * 0.85;
-        const newValue = gestureState.dy;
         const clampedValue = Math.max(
           minValue - lastOffset.current,
-          Math.min(maxValue - lastOffset.current, newValue)
+          Math.min(maxValue - lastOffset.current, gestureState.dy)
         );
         cardTranslateY.setValue(clampedValue);
       },
@@ -108,29 +105,29 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
     Animated.spring(cardTranslateY, {
       toValue: targetValue,
       useNativeDriver: true,
-      bounciness: 8,
-      speed: 12,
+      bounciness: 12,
+      speed: 14,
     }).start();
   }, [cardTranslateY]);
 
-  // 获取用户位置 - 修复：添加定位按钮并修复权限后地图不更新的问题
+  // 获取用户位置
   const getUserLocation = useCallback(async () => {
     setLocationLoading(true);
     try {
       if (Platform.OS === 'web') {
-        // Web 版本使用浏览器 Geolocation API
         if ('geolocation' in navigator) {
           navigator.geolocation.getCurrentPosition(
             (position) => {
-              const { latitude, longitude } = position.coords;
-              setUserLocation({ latitude, longitude });
+              setUserLocation({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              });
               setLocationLoading(false);
             },
             (error) => {
               console.error('获取位置失败:', error);
               setUserLocation(DEFAULT_CENTER);
               setLocationLoading(false);
-              Alert.alert('定位失败', '无法获取当前位置，已使用默认位置');
             },
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
           );
@@ -139,7 +136,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
           setLocationLoading(false);
         }
       } else {
-        // 移动版本使用 expo-location
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('权限提示', '需要定位权限才能显示您的位置');
@@ -151,26 +147,25 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
         const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
         });
-        const { latitude, longitude } = location.coords;
-        setUserLocation({ latitude, longitude });
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
         setLocationLoading(false);
       }
     } catch (error) {
       console.error('获取位置失败:', error);
       setUserLocation(DEFAULT_CENTER);
       setLocationLoading(false);
-      Alert.alert('定位失败', '无法获取当前位置，已使用默认位置');
     }
   }, []);
 
-  // 初始化时获取位置
   useEffect(() => {
     getUserLocation();
   }, [getUserLocation]);
 
   // 处理地点点击
   const handlePlacePress = useCallback((place: FavoritePlace) => {
-    setSelectedPlace(place);
     onPlacePress(place);
   }, [onPlacePress]);
 
@@ -186,7 +181,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
       );
     }
 
-    // 移动端使用原生地图
     return <NativeMapView userLocation={userLocation} favorites={favorites} onPlacePress={handlePlacePress} />;
   };
 
@@ -210,7 +204,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
       }
     }, []);
 
-    // 当位置更新时，移动地图到当前位置
     useEffect(() => {
       if (mapRef.current && userLocation) {
         mapRef.current.animateToRegion({
@@ -265,13 +258,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
       <View style={styles.searchContainer}>
         <TouchableOpacity onPress={onSearchPress} activeOpacity={0.8}>
           <BlurView
-            intensity={isDark ? 40 : 60}
+            intensity={isDark ? 15 : 25}
             tint={isDark ? 'dark' : 'light'}
             style={[
               styles.searchButton,
               {
-                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.5)',
-                backgroundColor: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+                backgroundColor: isDark ? 'rgba(15,15,15,0.4)' : 'rgba(255,255,255,0.4)',
               },
             ]}
           >
@@ -283,21 +276,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
         </TouchableOpacity>
       </View>
 
-      {/* 地图控制按钮（液态玻璃效果） */}
+      {/* 地图控制按钮 */}
       <View style={styles.mapControls}>
         {/* 最大化/还原按钮 */}
         <TouchableOpacity
           onPress={() => animateToPosition(cardPosition === 'collapsed' ? 'half' : 'collapsed')}
-          style={styles.controlButton}
+          activeOpacity={0.7}
         >
           <BlurView
-            intensity={isDark ? 40 : 60}
+            intensity={isDark ? 15 : 25}
             tint={isDark ? 'dark' : 'light'}
             style={[
-              styles.controlButtonInner,
+              styles.controlButton,
               {
-                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.5)',
-                backgroundColor: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+                backgroundColor: isDark ? 'rgba(15,15,15,0.4)' : 'rgba(255,255,255,0.4)',
               },
             ]}
           >
@@ -307,40 +300,40 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
           </BlurView>
         </TouchableOpacity>
 
-        {/* 定位按钮 - 修复：点击后定位到当前位置 */}
+        {/* 定位按钮 */}
         <TouchableOpacity
           onPress={getUserLocation}
-          style={styles.controlButton}
+          activeOpacity={0.7}
           disabled={locationLoading}
         >
           <BlurView
-            intensity={isDark ? 40 : 60}
+            intensity={isDark ? 15 : 25}
             tint={isDark ? 'dark' : 'light'}
             style={[
-              styles.controlButtonInner,
+              styles.controlButton,
               {
-                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.5)',
-                backgroundColor: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+                backgroundColor: isDark ? 'rgba(15,15,15,0.4)' : 'rgba(255,255,255,0.4)',
               },
             ]}
           >
-            <Text style={[styles.controlIcon, locationLoading && styles.controlIconLoading]}>
+            <Text style={[styles.controlIcon, locationLoading && { opacity: 0.5 }]}>
               {locationLoading ? '⏳' : '📍'}
             </Text>
           </BlurView>
         </TouchableOpacity>
       </View>
 
-      {/* 收藏计数（液态玻璃效果） */}
+      {/* 收藏计数 */}
       <View style={styles.mapCounter}>
         <BlurView
-          intensity={isDark ? 40 : 60}
+          intensity={isDark ? 15 : 25}
           tint={isDark ? 'dark' : 'light'}
           style={[
             styles.countBadge,
             {
-              borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.5)',
-              backgroundColor: isDark ? 'rgba(30,30,30,0.7)' : 'rgba(255,255,255,0.7)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+              backgroundColor: isDark ? 'rgba(15,15,15,0.4)' : 'rgba(255,255,255,0.4)',
             },
           ]}
         >
@@ -350,7 +343,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
         </BlurView>
       </View>
 
-      {/* 底部卡片（液态玻璃效果，叠加在地图上层） */}
+      {/* 底部卡片（液态玻璃效果） */}
       <Animated.View
         style={[
           styles.bottomCard,
@@ -360,21 +353,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
         ]}
         {...panResponder.panHandlers}
       >
-        {/* 液态玻璃背景 */}
         <BlurView
-          intensity={isDark ? 50 : 80}
+          intensity={isDark ? 20 : 35}
           tint={isDark ? 'dark' : 'light'}
           style={[
             styles.bottomCardInner,
             {
-              borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.5)',
-              backgroundColor: isDark ? 'rgba(20,20,20,0.85)' : 'rgba(255,255,255,0.85)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+              backgroundColor: isDark ? 'rgba(10,10,10,0.6)' : 'rgba(255,255,255,0.6)',
             },
           ]}
         >
           {/* 拖动指示器 */}
           <View style={styles.dragIndicatorContainer}>
-            <View style={[styles.dragIndicator, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)' }]} />
+            <View style={[styles.dragIndicator, { backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' }]} />
           </View>
 
           {/* 位置切换按钮 */}
@@ -383,17 +375,30 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
               <TouchableOpacity
                 key={pos}
                 onPress={() => animateToPosition(pos)}
-                style={[
-                  styles.positionButton,
-                  cardPosition === pos && styles.positionButtonActive,
-                ]}
+                activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.positionButtonText,
-                  { color: cardPosition === pos ? colors.primary : colors.textSecondary },
-                ]}>
-                  {pos === 'collapsed' ? '收起' : pos === 'half' ? '半屏' : '展开'}
-                </Text>
+                <BlurView
+                  intensity={cardPosition === pos ? (isDark ? 25 : 40) : (isDark ? 10 : 20)}
+                  tint={isDark ? 'dark' : 'light'}
+                  style={[
+                    styles.positionButton,
+                    {
+                      borderColor: cardPosition === pos
+                        ? 'rgba(255,255,255,0.3)'
+                        : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.2)',
+                      backgroundColor: cardPosition === pos
+                        ? 'rgba(255,255,255,0.15)'
+                        : isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.1)',
+                    },
+                  ]}
+                >
+                  <Text style={[
+                    styles.positionButtonText,
+                    { color: cardPosition === pos ? colors.primary : colors.textSecondary },
+                  ]}>
+                    {pos === 'collapsed' ? '收起' : pos === 'half' ? '半屏' : '展开'}
+                  </Text>
+                </BlurView>
               </TouchableOpacity>
             ))}
           </View>
@@ -426,13 +431,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
                   activeOpacity={0.8}
                 >
                   <BlurView
-                    intensity={isDark ? 30 : 50}
+                    intensity={isDark ? 15 : 25}
                     tint={isDark ? 'dark' : 'light'}
                     style={[
                       styles.placeCard,
                       {
-                        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.4)',
-                        backgroundColor: isDark ? 'rgba(40,40,40,0.7)' : 'rgba(255,255,255,0.7)',
+                        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
+                        backgroundColor: isDark ? 'rgba(20,20,20,0.4)' : 'rgba(255,255,255,0.4)',
                       },
                     ]}
                   >
@@ -445,9 +450,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
                         <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={1}>
                           {place.address}
                         </Text>
-                        {place.rating && (
-                          <Text style={styles.placeRating}>⭐ {place.rating.toFixed(1)}</Text>
-                        )}
                       </View>
                       <Text style={[styles.placeArrow, { color: colors.textSecondary }]}>›</Text>
                     </View>
@@ -466,7 +468,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // 地图样式
   mapContainer: {
     position: 'absolute',
     top: 0,
@@ -485,7 +486,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 18,
   },
-  // 搜索栏样式（液态玻璃）
   searchContainer: {
     position: 'absolute',
     top: 50,
@@ -509,7 +509,6 @@ const styles = StyleSheet.create({
   searchPlaceholder: {
     fontSize: 16,
   },
-  // 地图控制按钮样式（液态玻璃）
   mapControls: {
     position: 'absolute',
     top: 50,
@@ -520,23 +519,15 @@ const styles = StyleSheet.create({
   controlButton: {
     width: 44,
     height: 44,
-  },
-  controlButtonInner: {
-    width: 44,
-    height: 44,
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
     borderWidth: 1,
+    overflow: 'hidden',
   },
   controlIcon: {
     fontSize: 22,
   },
-  controlIconLoading: {
-    opacity: 0.5,
-  },
-  // 收藏计数样式（液态玻璃）
   mapCounter: {
     position: 'absolute',
     bottom: 20,
@@ -554,7 +545,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  // 底部卡片样式（液态玻璃）
   bottomCard: {
     position: 'absolute',
     left: 0,
@@ -591,9 +581,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 16,
-  },
-  positionButtonActive: {
-    backgroundColor: 'rgba(33, 150, 243, 0.15)',
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   positionButtonText: {
     fontSize: 14,
@@ -615,7 +604,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
-  // 收藏列表样式（液态玻璃）
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 40,
@@ -658,11 +646,6 @@ const styles = StyleSheet.create({
   },
   placeAddress: {
     fontSize: 14,
-    marginBottom: 4,
-  },
-  placeRating: {
-    fontSize: 14,
-    color: '#FFD700',
   },
   placeArrow: {
     fontSize: 24,
