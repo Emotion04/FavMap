@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../contexts/ThemeContext';
@@ -20,16 +21,18 @@ import { generateId } from '../utils/helpers';
 interface SearchScreenProps {
   onBack: () => void;
   onPlaceSelect: (place: FavoritePlace) => void;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
-const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) => {
+const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect, userLocation }) => {
   const { colors, isDark } = useTheme();
   const { addFavorite, favorites } = useFavorites();
   const [query, setQuery] = useState('');
+  const [city, setCity] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 搜索地点 - 修复：确保正确调用搜索服务
+  // 搜索地点 - 支持多页结果和城市筛选
   const handleSearch = useCallback(async () => {
     if (!query.trim()) {
       Alert.alert('提示', '请输入搜索关键词');
@@ -41,8 +44,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
 
     try {
       const mapService = await MapServiceFactory.getService();
-      console.log('开始搜索:', query);
-      const data = await mapService.searchKeyword(query);
+      console.log('开始搜索:', query, '城市:', city || '全国');
+
+      // 获取多页结果（最多 3 页，约 75 条）
+      const data = await mapService.searchKeyword(query, city || undefined, 3);
       console.log('搜索结果:', data.length, '条');
       setResults(data);
 
@@ -55,7 +60,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, city]);
 
   // 收藏地点
   const handleFavorite = useCallback(async (result: SearchResult) => {
@@ -177,6 +182,16 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
           <Text style={[styles.searchSubmitText, { color: colors.primary }]}>搜索</Text>
         </TouchableOpacity>
       </BlurView>
+      {/* 城市筛选（可选） */}
+      <View style={styles.cityContainer}>
+        <Text style={[styles.cityLabel, { color: colors.textSecondary }]}>城市:</Text>
+        <TextInput
+          style={[styles.cityInput, { color: colors.text, borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)" }]}
+          value={city}
+          onChangeText={setCity}
+          placeholder="全国" placeholderTextColor={colors.textSecondary}
+        />
+      </View>
 
       {/* 搜索结果 */}
       {loading ? (
@@ -245,6 +260,25 @@ const styles = StyleSheet.create({
   searchSubmitText: {
     fontSize: 16,
     fontWeight: '600',
+  // 城市筛选
+  },
+  cityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  cityLabel: {
+    fontSize: 14,
+  },
+  cityInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 14,
   },
   // 列表样式
   listContainer: {

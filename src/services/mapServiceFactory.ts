@@ -4,7 +4,7 @@ import { AMapService } from './amap';
 
 // 地图服务接口
 export interface MapService {
-  searchKeyword(keyword: string, city?: string): Promise<SearchResult[]>;
+  searchKeyword(keyword: string, city?: string, maxPages?: number): Promise<SearchResult[]>;
   getDetails(poiId: string): Promise<any>;
   searchNearbySubway(latitude: number, longitude: number): Promise<SubwayStation[]>;
   geocode(address: string, city?: string): Promise<{ latitude: number; longitude: number } | null>;
@@ -18,7 +18,7 @@ class TencentMapService implements MapService {
     return await ApiStorageService.getActiveApiKey();
   }
 
-  async searchKeyword(keyword: string, city?: string): Promise<SearchResult[]> {
+  async searchKeyword(keyword: string, city?: string, maxPages?: number): Promise<SearchResult[]> {
     try {
       const apiKey = await this.getApiKey();
       if (!apiKey) return [];
@@ -133,7 +133,7 @@ class BaiduMapService implements MapService {
     return await ApiStorageService.getActiveApiKey();
   }
 
-  async searchKeyword(keyword: string, city?: string): Promise<SearchResult[]> {
+  async searchKeyword(keyword: string, city?: string, maxPages?: number): Promise<SearchResult[]> {
     try {
       const apiKey = await this.getApiKey();
       if (!apiKey) return [];

@@ -31,8 +31,8 @@ export const AMapService = {
     }
   },
 
-  // 搜索地点
-  async searchKeyword(keyword: string, city?: string): Promise<SearchResult[]> {
+  // 搜索地点（支持分页获取更多结果）
+  async searchKeyword(keyword: string, city?: string, maxPages: number = 3): Promise<SearchResult[]> {
     try {
       const apiKey = await this.getApiKey();
       console.log('AMap searchKeyword - API Key:', apiKey ? '已配置' : '未配置');
@@ -42,28 +42,44 @@ export const AMapService = {
         return [];
       }
 
-      const cityParam = city ? `&city=${encodeURIComponent(city)}` : '';
-      const url = `https://restapi.amap.com/v3/place/text?key=${apiKey}&keywords=${encodeURIComponent(keyword)}${cityParam}&offset=20&page=1&extensions=all`;
+      const allResults: SearchResult[] = [];
+      const pageSize = 25; // 高德 API 最大每页 25 条
 
-      console.log('AMap 搜索请求:', url);
-      const response = await fetch(url);
-      const data = await response.json();
-      console.log('AMap 搜索响应:', data);
+      // 获取多页结果
+      for (let page = 1; page <= maxPages; page++) {
+        const cityParam = city ? `&city=${encodeURIComponent(city)}` : '';
+        const url = `https://restapi.amap.com/v3/place/text?key=${apiKey}&keywords=${encodeURIComponent(keyword)}${cityParam}&offset=${pageSize}&page=${page}&extensions=all`;
 
-      if (data.status === '1' && data.pois) {
-        return data.pois.map((poi: any) => ({
-          id: poi.id,
-          name: poi.name,
-          address: poi.address,
-          coordinate: {
-            latitude: parseFloat(poi.location.split(',')[1]),
-            longitude: parseFloat(poi.location.split(',')[0]),
-          },
-          rating: poi.biz_ext?.rating ? parseFloat(poi.biz_ext.rating) : undefined,
-          type: poi.type,
-        }));
+        console.log(`AMap 搜索请求 (第${page}页):`, url);
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log(`AMap 搜索响应 (第${page}页):`, data);
+
+        if (data.status === '1' && data.pois && data.pois.length > 0) {
+          const results = data.pois.map((poi: any) => ({
+            id: poi.id,
+            name: poi.name,
+            address: poi.address,
+            coordinate: {
+              latitude: parseFloat(poi.location.split(',')[1]),
+              longitude: parseFloat(poi.location.split(',')[0]),
+            },
+            rating: poi.biz_ext?.rating ? parseFloat(poi.biz_ext.rating) : undefined,
+            type: poi.type,
+          }));
+          allResults.push(...results);
+
+          // 如果返回的结果少于每页数量，说明没有更多了
+          if (data.pois.length < pageSize) {
+            break;
+          }
+        } else {
+          break;
+        }
       }
-      return [];
+
+      console.log(`搜索完成，共 ${allResults.length} 条结果`);
+      return allResults;
     } catch (error) {
       console.error('搜索地点失败:', error);
       return [];
