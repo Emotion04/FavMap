@@ -1,17 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Text, Alert, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  Text,
+  Alert,
+  Platform,
+  ScrollView,
+  Animated,
+  PanResponder,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Location from 'expo-location';
 import { useFavorites } from '../contexts/FavoritesContext';
 import { useTheme } from '../contexts/ThemeContext';
-import SearchBar from '../components/SearchBar';
 import GlassCard from '../components/GlassCard';
 import WebMap from '../components/WebMap';
 import { FavoritePlace } from '../types';
 import { DEFAULT_CENTER } from '../utils/constants';
-import { formatDistance } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
+
+// 底部卡片位置状态
+type CardPosition = 'collapsed' | 'half' | 'expanded';
 
 interface MapScreenProps {
   onSearchPress: () => void;
@@ -23,27 +35,135 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
   const { colors, isDark } = useTheme();
   const [selectedPlace, setSelectedPlace] = useState<FavoritePlace | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [cardPosition, setCardPosition] = useState<CardPosition>('half');
+
+  // 动画值
+  const cardAnimValue = useRef(new Animated.Value(height * 0.5)).current;
+  const mapAnimValue = useRef(new Animated.Value(height * 0.45)).current;
+
+  // 卡片拖动手势
+  const lastOffset = useRef(height * 0.5);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 10;
+      },
+      onPanResponderGrant: () => {
+        cardAnimValue.setOffset(lastOffset.current);
+        cardAnimValue.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const newValue = gestureState.dy;
+        const minHeight = height * 0.15;
+        const maxHeight = height * 0.85;
+        const clampedValue = Math.max(minHeight - lastOffset.current, Math.min(maxHeight - lastOffset.current, newValue));
+        cardAnimValue.setValue(clampedValue);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        cardAnimValue.flattenOffset();
+        const currentValue = lastOffset.current + gestureState.dy;
+        const velocity = gestureState.vy;
+
+        let targetPosition: CardPosition;
+        if (velocity > 500) {
+          targetPosition = 'collapsed';
+        } else if (velocity < -500) {
+          targetPosition = 'expanded';
+        } else if (currentValue < height * 0.3) {
+          targetPosition = 'collapsed';
+        } else if (currentValue > height * 0.7) {
+          targetPosition = 'expanded';
+        } else {
+          targetPosition = 'half';
+        }
+
+        animateToPosition(targetPosition);
+      },
+    })
+  ).current;
+
+  // 动画到指定位置
+  const animateToPosition = (position: CardPosition) => {
+    setCardPosition(position);
+    let targetValue: number;
+
+    switch (position) {
+      case 'collapsed':
+        targetValue = height * 0.15;
+        break;
+      case 'half':
+        targetValue = height * 0.5;
+        break;
+      case 'expanded':
+        targetValue = height * 0.85;
+        break;
+    }
+
+    lastOffset.current = targetValue;
+
+    Animated.spring(cardAnimValue, {
+      toValue: targetValue,
+      useNativeDriver: false,
+      bounciness: 8,
+    }).start();
+
+    // 同时调整地图高度
+    const mapHeight = height - targetValue;
+    Animated.spring(mapAnimValue, {
+      toValue: mapHeight,
+      useNativeDriver: false,
+      bounciness: 8,
+    }).start();
+  };
 
   // 获取用户位置
   useEffect(() => {
-    if (Platform.OS !== 'web') {
-      getUserLocation();
-    }
+    getUserLocation();
   }, []);
 
   const getUserLocation = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('权限提示', '需要定位权限才能显示您的位置');
-        return;
-      }
+      if (Platform.OS === 'web') {
+        // Web 版本使用浏览器 Geolocation API
+        if ('geolocation' in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const { latitude, longitude } = position.coords;
+              setUserLocation({ latitude, longitude });
+            },
+            (error) => {
+              console.error('获取位置失败:', error);
+              // 使用默认位置（北京）
+              setUserLocation(DEFAULT_CENTER);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 60000,
+            }
+          );
+        } else {
+          // 浏览器不支持 Geolocation，使用默认位置
+          setUserLocation(DEFAULT_CENTER);
+        }
+      } else {
+        // 移动版本使用 expo-location
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('权限提示', '需要定位权限才能显示您的位置');
+          setUserLocation(DEFAULT_CENTER);
+          return;
+        }
 
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = location.coords;
-      setUserLocation({ latitude, longitude });
+        const location = await Location.getCurrentPositionAsync({});
+        const { latitude, longitude } = location.coords;
+        setUserLocation({ latitude, longitude });
+      }
     } catch (error) {
       console.error('获取位置失败:', error);
+      setUserLocation(DEFAULT_CENTER);
     }
   };
 
@@ -53,14 +173,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
     onPlacePress(place);
   };
 
-  // Web 版本 - 地图 + 收藏列表
-  if (Platform.OS === 'web') {
-    const MAP_HEIGHT = height * 0.45;
+  // 切换地图最大化
+  const toggleMapExpand = () => {
+    if (mapExpanded) {
+      setMapExpanded(false);
+      animateToPosition('half');
+    } else {
+      setMapExpanded(true);
+      animateToPosition('collapsed');
+    }
+  };
 
+  // Web 版本
+  if (Platform.OS === 'web') {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* 地图区域 */}
-        <View style={[styles.webMapContainer, { height: MAP_HEIGHT }]}>
+        <Animated.View style={[styles.webMapContainer, { height: mapAnimValue }]}>
           <WebMap
             favorites={favorites}
             onPlacePress={handlePlacePress}
@@ -76,7 +205,34 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
                 style={[styles.searchButton, { borderColor: colors.border }]}
               >
                 <Text style={styles.searchIcon}>🔍</Text>
-                <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>搜索地点...</Text>
+                <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>
+                  搜索地点...
+                </Text>
+              </BlurView>
+            </TouchableOpacity>
+          </View>
+
+          {/* 地图控制按钮 */}
+          <View style={styles.mapControls}>
+            {/* 最大化按钮 */}
+            <TouchableOpacity onPress={toggleMapExpand} style={styles.controlButton}>
+              <BlurView
+                intensity={30}
+                tint={isDark ? 'dark' : 'light'}
+                style={styles.controlButtonInner}
+              >
+                <Text style={styles.controlIcon}>{mapExpanded ? '🔽' : '🔼'}</Text>
+              </BlurView>
+            </TouchableOpacity>
+
+            {/* 定位按钮 */}
+            <TouchableOpacity onPress={getUserLocation} style={styles.controlButton}>
+              <BlurView
+                intensity={30}
+                tint={isDark ? 'dark' : 'light'}
+                style={styles.controlButtonInner}
+              >
+                <Text style={styles.controlIcon}>📍</Text>
               </BlurView>
             </TouchableOpacity>
           </View>
@@ -89,10 +245,55 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
               </Text>
             </GlassCard>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* 底部收藏列表 */}
-        <View style={[styles.webListSection, { backgroundColor: colors.background }]}>
+        {/* 底部收藏列表（可拖动） */}
+        <Animated.View
+          style={[
+            styles.webListSection,
+            {
+              backgroundColor: colors.background,
+              height: cardAnimValue,
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          {/* 拖动指示器 */}
+          <View style={styles.dragIndicatorContainer}>
+            <View style={[styles.dragIndicator, { backgroundColor: colors.border }]} />
+          </View>
+
+          {/* 切换按钮 */}
+          <View style={styles.positionButtons}>
+            <TouchableOpacity
+              onPress={() => animateToPosition('collapsed')}
+              style={[
+                styles.positionButton,
+                cardPosition === 'collapsed' && styles.positionButtonActive,
+              ]}
+            >
+              <Text style={[styles.positionButtonText, { color: colors.textSecondary }]}>收起</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => animateToPosition('half')}
+              style={[
+                styles.positionButton,
+                cardPosition === 'half' && styles.positionButtonActive,
+              ]}
+            >
+              <Text style={[styles.positionButtonText, { color: colors.textSecondary }]}>半屏</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => animateToPosition('expanded')}
+              style={[
+                styles.positionButton,
+                cardPosition === 'expanded' && styles.positionButtonActive,
+              ]}
+            >
+              <Text style={[styles.positionButtonText, { color: colors.textSecondary }]}>展开</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.webListHeader}>
             <Text style={[styles.webTitle, { color: colors.text }]}>🗺️ FavMap</Text>
             <Text style={[styles.webSubtitle, { color: colors.textSecondary }]}>
@@ -139,13 +340,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
               ))
             )}
           </ScrollView>
-        </View>
+        </Animated.View>
       </View>
     );
   }
 
-  // 移动版本 - 使用原生地图
-  // 这里需要动态加载 react-native-maps
+  // 移动版本
   const [MapView, setMapView] = useState<any>(null);
   const [MapMarker, setMapMarker] = useState<any>(null);
 
@@ -171,11 +371,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
 
   return (
     <View style={styles.container}>
-      {/* 地图 */}
       <MapView
         style={styles.map}
         initialRegion={{
-          ...DEFAULT_CENTER,
+          ...(userLocation || DEFAULT_CENTER),
           latitudeDelta: 0.0922,
           longitudeDelta: 0.0421,
         }}
@@ -196,50 +395,29 @@ const MapScreen: React.FC<MapScreenProps> = ({ onSearchPress, onPlacePress }) =>
       {/* 搜索栏 */}
       <View style={styles.searchContainer}>
         <TouchableOpacity onPress={onSearchPress} activeOpacity={0.8}>
-          <SearchBar
-            value=""
-            onChangeText={() => {}}
-            onSubmit={() => {}}
-            placeholder="搜索地点..."
-          />
+          <BlurView
+            intensity={40}
+            tint={isDark ? 'dark' : 'light'}
+            style={[styles.searchButton, { borderColor: colors.border }]}
+          >
+            <Text style={styles.searchIcon}>🔍</Text>
+            <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>
+              搜索地点...
+            </Text>
+          </BlurView>
         </TouchableOpacity>
       </View>
 
-      {/* 选中的地点信息 */}
-      {selectedPlace && (
-        <View style={styles.selectedContainer}>
-          <GlassCard style={styles.selectedCard}>
-            <TouchableOpacity
-              onPress={() => onPlacePress(selectedPlace)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.selectedContent}>
-                <Text style={styles.selectedIcon}>{selectedPlace.icon}</Text>
-                <View style={styles.selectedInfo}>
-                  <Text style={[styles.selectedName, { color: colors.text }]} numberOfLines={1}>
-                    {selectedPlace.name}
-                  </Text>
-                  <Text style={[styles.selectedAddress, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {selectedPlace.address}
-                  </Text>
-                </View>
-                <Text style={[styles.arrow, { color: colors.textSecondary }]}>›</Text>
-              </View>
-            </TouchableOpacity>
-          </GlassCard>
-        </View>
-      )}
-
-      {/* 收藏数量 */}
+      {/* 收藏计数 */}
       <View style={styles.countContainer}>
-        <GlassCard style={styles.countCard}>
-          <Text style={[styles.countText, { color: colors.text }]}>
-            ⭐ {favorites.length} 个收藏
+        <GlassCard style={styles.countBadge}>
+          <Text style={[styles.countBadgeText, { color: colors.text }]}>
+            ⭐ {favorites.length}
           </Text>
         </GlassCard>
       </View>
 
-      {/* 回到当前位置按钮 */}
+      {/* 定位按钮 */}
       <View style={styles.locationButtonContainer}>
         <TouchableOpacity
           onPress={getUserLocation}
@@ -276,8 +454,30 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     left: 16,
+    right: 60,
+    zIndex: 10,
+  },
+  mapControls: {
+    position: 'absolute',
+    top: 16,
     right: 16,
     zIndex: 10,
+    gap: 8,
+  },
+  controlButton: {
+    width: 40,
+    height: 40,
+  },
+  controlButtonInner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  controlIcon: {
+    fontSize: 20,
   },
   webMapCounter: {
     position: 'absolute',
@@ -285,16 +485,7 @@ const styles = StyleSheet.create({
     left: 16,
     zIndex: 10,
   },
-  countBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  countBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   webListSection: {
-    flex: 1,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     marginTop: -16,
@@ -304,9 +495,39 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 10,
+    overflow: 'hidden',
+  },
+  dragIndicatorContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  dragIndicator: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  positionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  positionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  positionButtonActive: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+  },
+  positionButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   webListHeader: {
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 8,
     paddingHorizontal: 20,
   },
@@ -317,6 +538,17 @@ const styles = StyleSheet.create({
   },
   webSubtitle: {
     fontSize: 13,
+  },
+  webContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  // 搜索栏样式
+  searchContainer: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    right: 16,
   },
   searchButton: {
     flexDirection: 'row',
@@ -334,20 +566,53 @@ const styles = StyleSheet.create({
   searchPlaceholder: {
     fontSize: 16,
   },
-  webContent: {
-    flex: 1,
-    paddingHorizontal: 16,
+  // 收藏计数样式
+  countContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 16,
   },
+  countBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  countBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // 定位按钮样式
+  locationButtonContainer: {
+    position: 'absolute',
+    bottom: 60,
+    right: 16,
+  },
+  locationButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  locationIcon: {
+    fontSize: 24,
+  },
+  // 收藏列表样式
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 80,
+    paddingTop: 40,
+    paddingBottom: 40,
   },
   emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+    fontSize: 48,
+    marginBottom: 12,
   },
   emptyText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
   },
@@ -383,77 +648,6 @@ const styles = StyleSheet.create({
     color: '#FFD700',
   },
   placeArrow: {
-    fontSize: 24,
-  },
-  // 移动版本样式
-  searchContainer: {
-    position: 'absolute',
-    top: 60,
-    left: 16,
-    right: 16,
-  },
-  selectedContainer: {
-    position: 'absolute',
-    bottom: 120,
-    left: 16,
-    right: 16,
-  },
-  selectedCard: {
-    padding: 12,
-  },
-  selectedContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  selectedIcon: {
-    fontSize: 32,
-    marginRight: 12,
-  },
-  selectedInfo: {
-    flex: 1,
-  },
-  selectedName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  selectedAddress: {
-    fontSize: 14,
-  },
-  arrow: {
-    fontSize: 24,
-  },
-  countContainer: {
-    position: 'absolute',
-    bottom: 60,
-    left: 16,
-  },
-  countCard: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  countText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  locationButtonContainer: {
-    position: 'absolute',
-    bottom: 60,
-    right: 16,
-  },
-  locationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  locationIcon: {
     fontSize: 24,
   },
 });
