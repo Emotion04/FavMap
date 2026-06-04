@@ -201,11 +201,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
   const renderItem = ({ item }: { item: SearchResult & { distance?: number } }) => (
     <TouchableOpacity onPress={() => handleViewDetail(item)} activeOpacity={0.8}>
       <BlurView
-        intensity={isDark ? 15 : 25}
+        intensity={16}
         tint={isDark ? 'dark' : 'light'}
         style={[styles.resultCard, {
-          borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
-          backgroundColor: isDark ? 'rgba(20,20,20,0.4)' : 'rgba(255,255,255,0.4)',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+          backgroundColor: isDark ? 'rgba(15,15,15,0.15)' : 'rgba(255,255,255,0.15)',
         }]}
       >
         <View style={styles.resultContent}>
@@ -225,7 +225,9 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
             onPress={() => handleFavorite(item)}
             style={styles.favoriteButton}
           >
-            <Text style={styles.favoriteIcon}>⭐</Text>
+            <Text style={styles.favoriteIcon}>
+              {favorites.some(f => f.coordinate.latitude === item.coordinate.latitude && f.coordinate.longitude === item.coordinate.longitude) ? '⭐' : '☆'}
+            </Text>
           </TouchableOpacity>
         </View>
       </BlurView>
@@ -236,11 +238,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onPlaceSelect }) =>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* 搜索头部 */}
       <BlurView
-        intensity={isDark ? 20 : 35}
+        intensity={8}
         tint={isDark ? 'dark' : 'light'}
         style={[styles.searchHeader, {
           borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
-          backgroundColor: isDark ? 'rgba(10,10,10,0.6)' : 'rgba(255,255,255,0.6)',
+          backgroundColor: isDark ? 'rgba(15,15,15,0.05)' : 'rgba(255,255,255,0.05)',
         }]}
       >
         <TouchableOpacity onPress={onBack} style={styles.backButton}>

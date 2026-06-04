@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { FavoritesProvider } from './src/contexts/FavoritesContext';
@@ -9,397 +9,241 @@ import DetailScreen from './src/screens/DetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import ImportScreen from './src/screens/ImportScreen';
 import EditScreen from './src/screens/EditScreen';
+import GlowBall from './src/components/GlowBall';
 import { FavoritePlace } from './src/types';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  PanResponder,
+  View, Text, StyleSheet, TouchableOpacity,
+  Animated, Dimensions, PanResponder,
 } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 
-// 底部标签栏配置
-const TAB_ITEMS = [
+const TABS = [
   { key: 'map', label: '地图', icon: '🗺️' },
   { key: 'search', label: '搜索', icon: '🔍' },
   { key: 'favorites', label: '收藏', icon: '⭐' },
   { key: 'settings', label: '设置', icon: '⚙️' },
 ];
+const MAX_DW = 800;
 
-const TAB_COUNT = TAB_ITEMS.length;
-const DOCK_PADDING = 8;
-const DOCK_MARGIN = 16;
-const TAB_WIDTH = (SCREEN_WIDTH - DOCK_MARGIN * 2 - DOCK_PADDING * 2) / TAB_COUNT;
-
-// 物理弹簧参数 - 流体动画
-const SPRING_CONFIG = {
-  // 光球位移 - 流体姿态，较低阻尼产生更流畅的运动
-  ball: {
-    stiffness: 150,
-    damping: 12,
-    mass: 1.2,
-    useNativeDriver: true,
-  },
-  // 光球缩放 - 柔和的缩放
-  ballScale: {
-    stiffness: 200,
-    damping: 18,
-    mass: 0.8,
-    useNativeDriver: true,
-  },
-  // Dock 拖拽
-  dockDrag: {
-    stiffness: 180,
-    damping: 16,
-    mass: 1,
-    useNativeDriver: true,
-  },
+const bezier = (t: number, a: number, b: number, c: number, d: number) => {
+  const u = 1 - t;
+  return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
 };
 
-// 主应用内容
 function AppContent() {
   const { colors, isDark } = useTheme();
-  const [currentScreen, setCurrentScreen] = useState<
-    'map' | 'search' | 'detail' | 'settings' | 'import' | 'edit'
-  >('map');
-  const [selectedPlace, setSelectedPlace] = useState<FavoritePlace | null>(null);
+  const [screen, setScreen] = useState<'map' | 'search' | 'detail' | 'settings' | 'import' | 'edit'>('map');
+  const [prevScreen, setPrevScreen] = useState<'map' | 'search' | 'settings'>('map');
   const [activeTab, setActiveTab] = useState(0);
+    const [selectedPlace, setSelectedPlace] = useState<FavoritePlace | null>(null);
 
-  // 光球动画值
-  const ballPositionX = useRef(new Animated.Value(0)).current;
-  const ballScale = useRef(new Animated.Value(1)).current;
-  const ballOpacity = useRef(new Animated.Value(1)).current;
-  const ballGlow = useRef(new Animated.Value(0.8)).current;
+  const [sw, setSw] = useState(SW);
+  useEffect(() => {
+    const s = Dimensions.addEventListener('change', ({ window }) => setSw(window.width));
+    return () => s?.remove();
+  }, []);
 
-  // Dock 拖拽动画值
-  const dockTranslateX = useRef(new Animated.Value(0)).current;
-  const dockDragOffset = useRef(0);
+  const large = sw > 1000;
+  const dw = Math.min(sw - 32, MAX_DW);
 
-  // 记录光球起始位置
-  const ballStartX = useRef(0);
+  // Dock 定位：edge=贴边方向, offset=沿边的偏移
+  const [dockPos, setDockPos] = useState({ edge: 'bottom' as 'bottom' | 'left' | 'right', offset: sw / 2 });
 
-  // 计算标签位置
-  const getTabCenterX = useCallback(
-    (index: number) => {
-      return index * TAB_WIDTH + TAB_WIDTH / 2;
-    },
-    []
-  );
+  const vert = dockPos.edge !== 'bottom';
+  const ts = vert ? 56 : (dw - 16) / TABS.length;
+  // 底部时限制最大 tab 宽度
+  const tsClamped = vert ? ts : Math.min(ts, 100);
 
-  // Dock 拖拽手势
-  const dockPanResponder = useRef(
+  // 动画
+  const ballP = useRef(new Animated.Value(activeTab)).current;
+  const ballSx = useRef(new Animated.Value(1)).current;
+  const ballSy = useRef(new Animated.Value(1)).current;
+  const pageFade = useRef(new Animated.Value(1)).current;
+  const dragStart = useRef({ x: 0, y: 0, mx: 0, my: 0 });
+  const didDrag = useRef(false);
+
+  // 光球动画（纯视觉）
+  const moveBall = useCallback((from: number, to: number) => {
+    ballP.setValue(from);
+    ballSx.setValue(1);
+    ballSy.setValue(1);
+    const dir = to > from ? 1 : -1;
+    const t0 = Date.now();
+    const frame = () => {
+      const p = Math.min((Date.now() - t0) / 500, 1);
+      const e = bezier(p, 0, 0.25, 0.75, 1);
+      ballP.setValue(from + (to - from) * e);
+      ballSx.setValue(1 + dir * 0.18 * Math.sin(p * Math.PI) * (1 - p));
+      ballSy.setValue(1 - dir * 0.10 * Math.sin(p * Math.PI) * (1 - p));
+      if (p < 1) requestAnimationFrame(frame);
+      else { ballSx.setValue(1); ballSy.setValue(1); }
+    };
+    requestAnimationFrame(frame);
+  }, [ballP, ballSx, ballSy]);
+
+  // 页面切换——快速淡入淡出，无闪黑
+  const switchScreen = useCallback((s: string) => {
+    // 记录上一个主页面（用于返回）
+    if (screen === 'map' || screen === 'search' || screen === 'settings') {
+      setPrevScreen(screen);
+    }
+    pageFade.setValue(1);
+    Animated.sequence([
+      Animated.timing(pageFade, { toValue: 0.92, duration: 60, useNativeDriver: true }),
+      Animated.timing(pageFade, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+    setScreen(s as any);
+  }, [pageFade, screen]);
+
+  // Tab 点击
+  const onTab = useCallback((i: number, key: string) => {
+    if (didDrag.current) { didDrag.current = false; return; }
+    if (i === activeTab) return;
+    const prev = activeTab;
+    setActiveTab(i);
+    switchScreen(key === 'favorites' ? 'map' : key);
+    moveBall(prev, i);
+  }, [activeTab, moveBall, switchScreen]);
+
+  // Dock 拖拽——跟随手指，松手贴边
+  const [dragOff, setDragOff] = useState({ dx: 0, dy: 0, active: false });
+  const dockPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10;
-      },
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5 || Math.abs(g.dy) > 5,
       onPanResponderGrant: () => {
-        dockDragOffset.current = (dockTranslateX as any)._value;
+        didDrag.current = false;
+        dragStart.current = { x: 0, y: 0, mx: 0, my: 0 };
       },
-      onPanResponderMove: (_, gestureState) => {
-        // 拖拽位置滞后手指（速度越大滞后越明显）
-        const lagFactor = Math.max(0.3, 1 - Math.abs(gestureState.vx) * 0.1);
-        const targetX = dockDragOffset.current + gestureState.dx * lagFactor;
-
-        // 限制范围
-        const maxX = 50;
-        const minX = -50;
-        const clampedX = Math.max(minX, Math.min(maxX, targetX));
-
-        dockTranslateX.setValue(clampedX);
+      onPanResponderMove: (_, g) => {
+        didDrag.current = true;
+        setDragOff({ dx: g.dx, dy: g.dy, active: true });
       },
-      onPanResponderRelease: (_, gestureState) => {
-        // 松手后过冲小幅震荡后回弹归位
-        Animated.spring(dockTranslateX, {
-          toValue: 0,
-          ...SPRING_CONFIG.dockDrag,
-        }).start();
+      onPanResponderRelease: (_, g) => {
+        setDragOff({ dx: 0, dy: 0, active: false });
+        const vx = g.vx, vy = g.vy;
+        const ex = g.moveX, ey = g.moveY;
+
+        let edge: 'bottom' | 'left' | 'right' = dockPos.edge;
+        let offset = dockPos.offset;
+
+        if (Math.abs(vx) > Math.abs(vy) && Math.abs(vx) > 200) {
+          edge = vx > 0 ? 'right' : 'left';
+          offset = Math.max(100, Math.min(SH - 100, ey));
+        } else if (Math.abs(vy) > 200) {
+          edge = 'bottom';
+          offset = Math.max(100, Math.min(sw - 100, ex));
+        } else {
+          const dL = ex, dR = sw - ex, dB = SH - ey;
+          if (dL < dR && dL < dB) { edge = 'left'; offset = Math.max(100, Math.min(SH - 100, ey)); }
+          else if (dR < dL && dR < dB) { edge = 'right'; offset = Math.max(100, Math.min(SH - 100, ey)); }
+          else { edge = 'bottom'; offset = Math.max(100, Math.min(sw - 100, ex)); }
+        }
+
+        setDockPos({ edge, offset });
       },
     })
   ).current;
 
-  // 光球跃迁动画 - 流体姿态
-  const animateBallTransition = useCallback(
-    (fromIndex: number, toIndex: number, callback: () => void) => {
-      const fromX = getTabCenterX(fromIndex);
-      const toX = getTabCenterX(toIndex);
-
-      // 设置初始位置
-      ballPositionX.setValue(fromX);
-      ballStartX.current = fromX;
-
-      // 重置动画值
-      ballScale.setValue(1);
-      ballOpacity.setValue(1);
-
-      // 流体动画：位移和缩放同时进行
-      // 位移：流体姿态，弹簧阻尼曲线
-      Animated.spring(ballPositionX, {
-        toValue: toX,
-        ...SPRING_CONFIG.ball,
-      }).start();
-
-      // 缩放：起飞时略微放大，落地时柔和回弹
-      Animated.sequence([
-        // 起飞放大
-        Animated.spring(ballScale, {
-          toValue: 1.2,
-          ...SPRING_CONFIG.ballScale,
-        }),
-        // 落地回弹
-        Animated.spring(ballScale, {
-          toValue: 0.95,
-          ...SPRING_CONFIG.ballScale,
-        }),
-        // 恢复正常
-        Animated.spring(ballScale, {
-          toValue: 1,
-          ...SPRING_CONFIG.ballScale,
-        }),
-      ]).start();
-
-      // 动画完成后执行页面切换
-      setTimeout(() => {
-        callback();
-      }, 400);
-    },
-    [getTabCenterX, ballPositionX, ballScale, ballOpacity]
-  );
-
-  // 处理标签点击
-  const handleTabPress = useCallback(
-    (index: number, key: string) => {
-      if (index === activeTab) return;
-
-      const fromIndex = activeTab;
-      const toIndex = index;
-
-      // 光球跃迁动画，完成后切换页面
-      animateBallTransition(fromIndex, toIndex, () => {
-        setActiveTab(toIndex);
-        if (key === 'favorites') {
-          setCurrentScreen('map');
-        } else {
-          setCurrentScreen(key as any);
-        }
-      });
-    },
-    [activeTab, animateBallTransition]
-  );
-
-  // 处理搜索按钮点击
-  const handleSearchPress = () => {
-    setCurrentScreen('search');
-  };
-
-  // 处理地点选择
-  const handlePlaceSelect = (place: FavoritePlace) => {
-    setSelectedPlace(place);
-    setCurrentScreen('detail');
-  };
-
-  // 处理返回
-  const handleBack = () => {
-    setCurrentScreen('map');
-    setSelectedPlace(null);
-  };
-
-  // 处理编辑
-  const handleEdit = (place: FavoritePlace) => {
-    setSelectedPlace(place);
-    setCurrentScreen('edit');
-  };
-
-  // 处理导入按钮点击
-  const handleImportPress = () => {
-    setCurrentScreen('import');
-  };
-
-  // 处理编辑保存
-  const handleEditSave = (place: FavoritePlace) => {
-    setSelectedPlace(place);
-    setCurrentScreen('detail');
-  };
-
-  // 渲染当前屏幕
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'map':
-        return <MapScreen onSearchPress={handleSearchPress} onPlacePress={handlePlaceSelect} />;
-      case 'search':
-        return <SearchScreen onBack={handleBack} onPlaceSelect={handlePlaceSelect} />;
-      case 'detail':
-        return selectedPlace ? (
-          <DetailScreen place={selectedPlace} onBack={handleBack} onEdit={handleEdit} />
-        ) : null;
-      case 'settings':
-        return <SettingsScreen onImportPress={handleImportPress} />;
-      case 'import':
-        return <ImportScreen onBack={() => setCurrentScreen('settings')} />;
-      case 'edit':
-        return selectedPlace ? (
-          <EditScreen place={selectedPlace} onBack={() => setCurrentScreen('detail')} onSave={handleEditSave} />
-        ) : null;
-      default:
-        return null;
-    }
-  };
-
-  // 是否显示底部标签栏
-  const showTabBar = ['map', 'search', 'settings'].includes(currentScreen);
+  // 页面渲染——保持地图常驻避免重载
+  const show = ['map', 'search', 'settings'].includes(screen);
+  const showMap = screen !== 'detail' && screen !== 'edit';
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[h.con, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* 主内容区域 */}
-      <View style={styles.content}>{renderScreen()}</View>
-
-      {/* 底部液态玻璃 Dock */}
-      {showTabBar && (
-        <Animated.View
-          style={[styles.dockContainer, { transform: [{ translateX: dockTranslateX }] }]}
-          {...dockPanResponder.panHandlers}
-        >
-          {/* 液态玻璃背景层 */}
-          <View style={styles.dockGlassWrapper}>
-            {/* 色散彩边效果（RGB 通道错位） */}
-            <View
-              style={[
-                styles.dockChromatic,
-                {
-                  borderColor: isDark
-                    ? 'rgba(100, 180, 255, 0.15)'
-                    : 'rgba(100, 180, 255, 0.2)',
-                },
-              ]}
+      {/* 页面叠化容器 */}
+      <Animated.View style={[h.content, { opacity: pageFade }]}>
+        {/* 地图常驻，不卸载 */}
+        <View style={[h.screenLayer, { display: showMap ? 'flex' : 'none' }]}>
+          <MapScreen
+            onSearchPress={() => switchScreen('search')}
+            onPlacePress={(p: FavoritePlace) => { setSelectedPlace(p); switchScreen('detail'); }}
+          />
+        </View>
+        {screen === 'search' && (
+          <View style={h.screenLayer}>
+            <SearchScreen
+              onBack={() => switchScreen('map')}
+              onPlaceSelect={(p: FavoritePlace) => { setSelectedPlace(p); switchScreen('detail'); }}
             />
+          </View>
+        )}
+        {screen === 'detail' && selectedPlace && (
+          <View style={h.screenLayer}>
+            <DetailScreen place={selectedPlace} onBack={() => switchScreen(prevScreen)} onEdit={(p: FavoritePlace) => { setSelectedPlace(p); switchScreen('edit'); }} />
+          </View>
+        )}
+        {screen === 'settings' && (
+          <View style={h.screenLayer}>
+            <SettingsScreen onImportPress={() => switchScreen('import')} />
+          </View>
+        )}
+        {screen === 'import' && (
+          <View style={h.screenLayer}>
+            <ImportScreen onBack={() => switchScreen('settings')} />
+          </View>
+        )}
+        {screen === 'edit' && selectedPlace && (
+          <View style={h.screenLayer}>
+            <EditScreen place={selectedPlace} onBack={() => switchScreen('detail')} onSave={(p: FavoritePlace) => { setSelectedPlace(p); switchScreen('detail'); }} />
+          </View>
+        )}
+      </Animated.View>
 
-            {/* 主模糊层 */}
-            <BlurView
-              intensity={isDark ? 25 : 40}
-              tint={isDark ? 'dark' : 'light'}
-              style={[
-                styles.dockBlur,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(10, 10, 15, 0.55)'
-                    : 'rgba(245, 245, 255, 0.55)',
-                },
-              ]}
-            >
-              {/* 菲涅尔角度高光反射层 */}
-              <View
-                style={[
-                  styles.dockFresnel,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255, 255, 255, 0.03)'
-                      : 'rgba(255, 255, 255, 0.15)',
-                  },
-                ]}
-              />
-
-              {/* 弥散光球指示器 */}
+      {/* Dock——纯 CSS 锚定 + 拖拽跟随 */}
+      {show && (
+        <Animated.View
+          {...dockPan.panHandlers}
+          style={[
+            dockPos.edge === 'left'
+              ? { position: 'absolute', left: 16, top: dockPos.offset - 130, width: 72 }
+              : dockPos.edge === 'right'
+              ? { position: 'absolute', right: 16, top: dockPos.offset - 130, width: 72 }
+              : { position: 'absolute', bottom: 24, left: dockPos.offset - (large ? Math.min(dw, MAX_DW) / 2 : dw / 2), width: large ? Math.min(dw, MAX_DW) : dw },
+            dragOff.active && { transform: [{ translateX: dragOff.dx }, { translateY: dragOff.dy }] } as any,
+          ]}
+        >
+          <View style={h.wrap}>
+            <BlurView intensity={10} tint={isDark ? 'dark' : 'light'}
+              style={[h.blur, { backgroundColor: isDark ? 'rgba(15,15,20,0.12)' : 'rgba(255,255,255,0.12)', paddingVertical: vert ? 16 : 12, paddingHorizontal: vert ? 12 : 8 }]}>
+              <View style={[h.fresnel, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.10)' }]} />
+              {/* 光球 */}
               <Animated.View
                 style={[
-                  styles.lightBall,
-                  {
-                    transform: [
-                      { translateX: Animated.add(ballPositionX, -TAB_WIDTH / 2) },
-                      { scale: ballScale },
-                    ],
-                    opacity: ballOpacity,
-                  },
+                  h.ball,
+                  vert ? { top: 12 + ts / 2, left: 0 } : { top: 30, left: 8 + tsClamped / 2 },
+                  { transform: [
+                    vert ? { translateY: Animated.multiply(ballP, ts + 4) } : { translateX: Animated.multiply(ballP, tsClamped) },
+                    { scaleX: ballSx }, { scaleY: ballSy },
+                  ] },
                 ]}
               >
-                {/* 最外层弥散光晕 - 低透明度 */}
-                <View
-                  style={[
-                    styles.ballGlowOuter,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255, 255, 255, 0.05)'
-                        : 'rgba(255, 255, 255, 0.08)',
-                    },
-                  ]}
-                />
-                {/* 中层弥散光晕 */}
-                <View
-                  style={[
-                    styles.ballGlowMiddle,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255, 255, 255, 0.12)'
-                        : 'rgba(255, 255, 255, 0.18)',
-                    },
-                  ]}
-                />
-                {/* 内层光晕 */}
-                <View
-                  style={[
-                    styles.ballGlowInner,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255, 255, 255, 0.25)'
-                        : 'rgba(255, 255, 255, 0.35)',
-                    },
-                  ]}
-                />
-                {/* 核心高亮 - 最亮 */}
-                <View
-                  style={[
-                    styles.ballCore,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255, 255, 255, 0.5)'
-                        : 'rgba(255, 255, 255, 0.7)',
-                    },
-                  ]}
-                />
+                <GlowBall size={vert ? 36 : 52} isDark={isDark} />
               </Animated.View>
 
-              {/* Tab 选项 */}
-              <View style={styles.tabsContainer}>
-                {TAB_ITEMS.map((item, index) => {
-                  const isActive = index === activeTab;
+              {/* Tabs */}
+              <View style={[h.tabs, vert ? h.tabsV : h.tabsH]}>
+                {TABS.map((t, i) => {
+                  const on = i === activeTab;
                   return (
                     <TouchableOpacity
-                      key={item.key}
-                      style={styles.tabItem}
-                      onPress={() => handleTabPress(index, item.key)}
+                      key={t.key}
+                      style={vert ? [h.tabV, { height: ts }] : [h.tabH, { width: tsClamped }]}
+                      onPress={() => onTab(i, t.key)}
                       activeOpacity={0.7}
                     >
-                      <Animated.Text
-                        style={[
-                          styles.tabIcon,
-                          {
-                            transform: [{ scale: isActive ? 1.1 : 1 }],
-                          },
-                        ]}
-                      >
-                        {item.icon}
+                      <Animated.Text style={[h.icon, { transform: [{ scale: on ? 1.1 : 1 }] }]}>
+                        {t.icon}
                       </Animated.Text>
-                      <Text
-                        style={[
-                          styles.tabLabel,
-                          {
-                            color: isActive
-                              ? isDark
-                                ? '#FFFFFF'
-                                : '#212121'
-                              : isDark
-                              ? 'rgba(255,255,255,0.5)'
-                              : 'rgba(0,0,0,0.4)',
-                            fontWeight: isActive ? '600' : '400',
-                          },
-                        ]}
-                      >
-                        {item.label}
+                      <Text style={[h.label, {
+                        color: on ? (isDark ? '#FFFFFF' : '#1A1A1A')
+                                 : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'),
+                        fontWeight: on ? '600' : '400',
+                      }]}>
+                        {t.label}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -413,7 +257,6 @@ function AppContent() {
   );
 }
 
-// 主应用
 export default function App() {
   return (
     <ThemeProvider>
@@ -424,115 +267,32 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+const h = StyleSheet.create({
+  con: { flex: 1 },
+  content: { flex: 1, position: 'relative' },
+  screenLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  dock: { position: 'absolute', zIndex: 100 },
+  wrap: { borderRadius: 28, overflow: 'hidden', position: 'relative' },
+  chromatic: {
+    position: 'absolute', top: -1, left: -1, right: -1, bottom: -1,
+    borderRadius: 29, borderWidth: 2, opacity: 0.5,
   },
-  content: {
-    flex: 1,
+  blur: {
+    borderRadius: 28, overflow: 'hidden', borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2, shadowRadius: 24, elevation: 15,
   },
-  // Dock 容器
-  dockContainer: {
-    position: 'absolute',
-    bottom: 24,
-    left: DOCK_MARGIN,
-    right: DOCK_MARGIN,
-    zIndex: 100,
+  fresnel: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: '50%',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
   },
-  dockGlassWrapper: {
-    borderRadius: 28,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  // 色散彩边
-  dockChromatic: {
-    position: 'absolute',
-    top: -1,
-    left: -1,
-    right: -1,
-    bottom: -1,
-    borderRadius: 29,
-    borderWidth: 2,
-    opacity: 0.6,
-  },
-  // 主模糊层
-  dockBlur: {
-    borderRadius: 28,
-    paddingVertical: 12,
-    paddingHorizontal: DOCK_PADDING,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 15,
-  },
-  // 菲涅尔高光
-  dockFresnel: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '50%',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-  },
-  // 光球容器
-  lightBall: {
-    position: 'absolute',
-    top: 4,
-    left: DOCK_PADDING,
-    width: TAB_WIDTH,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // 最外层弥散光晕
-  ballGlowOuter: {
-    position: 'absolute',
-    width: TAB_WIDTH + 32,
-    height: 80,
-    borderRadius: 40,
-  },
-  // 中层弥散光晕
-  ballGlowMiddle: {
-    position: 'absolute',
-    width: TAB_WIDTH + 16,
-    height: 68,
-    borderRadius: 34,
-  },
-  // 内层光晕
-  ballGlowInner: {
-    position: 'absolute',
-    width: TAB_WIDTH + 4,
-    height: 60,
-    borderRadius: 30,
-  },
-  // 核心高亮
-  ballCore: {
-    width: TAB_WIDTH - 4,
-    height: 52,
-    borderRadius: 26,
-  },
-  // Tab 容器
-  tabsContainer: {
-    flexDirection: 'row',
-    position: 'relative',
-    zIndex: 1,
-  },
-  tabItem: {
-    width: TAB_WIDTH,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  tabIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  tabLabel: {
-    fontSize: 11,
-  },
+  ball: { position: 'absolute', alignItems: 'center', justifyContent: 'center', width: 0, height: 0 },
+  tabs: { position: 'relative', zIndex: 1 },
+  tabsH: { flexDirection: 'row' },
+  tabsV: { flexDirection: 'column' },
+  tabH: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
+  tabV: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  icon: { fontSize: 20, marginBottom: 2 },
+  label: { fontSize: 10, fontWeight: '500' },
 });

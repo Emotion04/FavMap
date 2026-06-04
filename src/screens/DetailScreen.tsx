@@ -25,11 +25,14 @@ interface DetailScreenProps {
 
 const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) => {
   const { colors, isDark } = useTheme();
-  const { updateFavorite, removeFavorite } = useFavorites();
+  const { updateFavorite, removeFavorite, addFavorite, favorites } = useFavorites();
   const [subwayStations, setSubwayStations] = useState<SubwayStation[]>(
     place.subwayStations || []
   );
   const [loadingSubway, setLoadingSubway] = useState(false);
+  // 本地状态：图标即时更新
+  const [currentIcon, setCurrentIcon] = useState(place.icon);
+  const isFav = favorites.some(f => f.id === place.id);
 
   useEffect(() => {
     if (!place.subwayStations || place.subwayStations.length === 0) {
@@ -103,6 +106,7 @@ const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) =>
   }, [place, removeFavorite, onBack]);
 
   const handleChangeIcon = useCallback(async (icon: string) => {
+    setCurrentIcon(icon); // 即时反馈
     await updateFavorite(place.id, { icon });
   }, [place, updateFavorite]);
 
@@ -110,19 +114,31 @@ const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) =>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* 头部 */}
       <BlurView
-        intensity={isDark ? 20 : 35}
+        intensity={8}
         tint={isDark ? 'dark' : 'light'}
         style={[styles.header, {
           borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
-          backgroundColor: isDark ? 'rgba(10,10,10,0.6)' : 'rgba(255,255,255,0.6)',
+          backgroundColor: isDark ? 'rgba(15,15,15,0.05)' : 'rgba(255,255,255,0.05)',
         }]}
       >
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={[styles.backIcon, { color: colors.text }]}>←</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-          {place.name}
+          {currentIcon} {place.name}
         </Text>
+        <TouchableOpacity
+          onPress={() => {
+            if (isFav) {
+              removeFavorite(place.id).then(onBack);
+            } else {
+              addFavorite({ name: place.name, address: place.address, coordinate: place.coordinate, icon: currentIcon });
+            }
+          }}
+          style={styles.editButton}
+        >
+          <Text style={styles.editIcon}>{isFav ? '⭐' : '☆'}</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => onEdit(place)} style={styles.editButton}>
           <Text style={styles.editIcon}>✏️</Text>
         </TouchableOpacity>
@@ -139,7 +155,7 @@ const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) =>
           }]}
         >
           <View style={styles.basicInfo}>
-            <Text style={styles.icon}>{place.icon}</Text>
+            <Text style={styles.icon}>{currentIcon}</Text>
             <View style={styles.info}>
               <Text style={[styles.name, { color: colors.text }]}>{place.name}</Text>
               <Text style={[styles.address, { color: colors.textSecondary }]}>{place.address}</Text>
@@ -166,16 +182,16 @@ const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) =>
                 activeOpacity={0.7}
               >
                 <BlurView
-                  intensity={place.icon === item.emoji ? (isDark ? 25 : 40) : (isDark ? 10 : 20)}
+                  intensity={currentIcon === item.emoji ? (isDark ? 25 : 40) : (isDark ? 10 : 20)}
                   tint={isDark ? 'dark' : 'light'}
                   style={[
                     styles.iconItem,
-                    place.icon === item.emoji && styles.iconItemSelected,
+                    currentIcon === item.emoji && styles.iconItemSelected,
                     {
-                      borderColor: place.icon === item.emoji
+                      borderColor: currentIcon === item.emoji
                         ? 'rgba(33, 150, 243, 0.5)'
                         : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.2)',
-                      backgroundColor: place.icon === item.emoji
+                      backgroundColor: currentIcon === item.emoji
                         ? 'rgba(33, 150, 243, 0.15)'
                         : isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.1)',
                     },
@@ -268,7 +284,7 @@ const DetailScreen: React.FC<DetailScreenProps> = ({ place, onBack, onEdit }) =>
 
       {/* 底部操作栏 */}
       <BlurView
-        intensity={isDark ? 20 : 35}
+        intensity={8}
         tint={isDark ? 'dark' : 'light'}
         style={[styles.bottomBar, {
           borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.3)',
