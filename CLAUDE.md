@@ -88,3 +88,8 @@ src/
 ### 领域文档
 
 单上下文布局，`CONTEXT.md` 和 `docs/adr/` 在仓库根目录。详见 `docs/agents/domain.md`。
+
+
+### 注意事项
+1. 始终采用中文
+2. 不要自动git push推送到仓库，仅在用户命令之后才推送
