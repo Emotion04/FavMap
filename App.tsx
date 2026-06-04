@@ -18,7 +18,6 @@ import {
   Animated,
   Dimensions,
   PanResponder,
-  Platform,
 } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -36,20 +35,23 @@ const DOCK_PADDING = 8;
 const DOCK_MARGIN = 16;
 const TAB_WIDTH = (SCREEN_WIDTH - DOCK_MARGIN * 2 - DOCK_PADDING * 2) / TAB_COUNT;
 
-// 物理弹簧参数
+// 物理弹簧参数 - 流体动画
 const SPRING_CONFIG = {
+  // 光球位移 - 流体姿态，较低阻尼产生更流畅的运动
   ball: {
+    stiffness: 150,
+    damping: 12,
+    mass: 1.2,
+    useNativeDriver: true,
+  },
+  // 光球缩放 - 柔和的缩放
+  ballScale: {
     stiffness: 200,
     damping: 18,
-    mass: 1.0,
+    mass: 0.8,
     useNativeDriver: true,
   },
-  ballScale: {
-    stiffness: 280,
-    damping: 24,
-    mass: 0.7,
-    useNativeDriver: true,
-  },
+  // Dock 拖拽
   dockDrag: {
     stiffness: 180,
     damping: 16,
@@ -120,7 +122,7 @@ function AppContent() {
     })
   ).current;
 
-  // 光球跃迁动画
+  // 光球跃迁动画 - 流体姿态
   const animateBallTransition = useCallback(
     (fromIndex: number, toIndex: number, callback: () => void) => {
       const fromX = getTabCenterX(fromIndex);
@@ -133,66 +135,39 @@ function AppContent() {
       // 重置动画值
       ballScale.setValue(1);
       ballOpacity.setValue(1);
-      ballGlow.setValue(0.8);
 
-      // 阶段1: 起飞瞬间过冲放大
-      Animated.spring(ballScale, {
-        toValue: 1.5,
-        ...SPRING_CONFIG.ballScale,
-      }).start();
-
-      // 阶段2: 光球位移（弹簧阻尼曲线，有过冲）
+      // 流体动画：位移和缩放同时进行
+      // 位移：流体姿态，弹簧阻尼曲线
       Animated.spring(ballPositionX, {
         toValue: toX,
         ...SPRING_CONFIG.ball,
       }).start();
 
-      // 阶段3: 飞行途中缓慢收缩
-      setTimeout(() => {
+      // 缩放：起飞时略微放大，落地时柔和回弹
+      Animated.sequence([
+        // 起飞放大
         Animated.spring(ballScale, {
-          toValue: 0.8,
+          toValue: 1.2,
           ...SPRING_CONFIG.ballScale,
-        }).start();
-      }, 150);
-
-      // 阶段4: 落地目标点位小幅回弹缩放
-      setTimeout(() => {
+        }),
+        // 落地回弹
         Animated.spring(ballScale, {
-          toValue: 1.1,
+          toValue: 0.95,
           ...SPRING_CONFIG.ballScale,
-        }).start();
-      }, 350);
-
-      setTimeout(() => {
+        }),
+        // 恢复正常
         Animated.spring(ballScale, {
           toValue: 1,
           ...SPRING_CONFIG.ballScale,
-        }).start();
-      }, 450);
+        }),
+      ]).start();
 
-      // 阶段5: 光球渐隐销毁 + Bloom 效果增强
+      // 动画完成后执行页面切换
       setTimeout(() => {
-        Animated.parallel([
-          Animated.spring(ballGlow, {
-            toValue: 1.5,
-            ...SPRING_CONFIG.ballScale,
-          }),
-          Animated.timing(ballOpacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          // 动画完成后执行页面切换
-          callback();
-          // 重置光球状态
-          ballOpacity.setValue(1);
-          ballGlow.setValue(0.8);
-          ballScale.setValue(1);
-        });
-      }, 500);
+        callback();
+      }, 400);
     },
-    [getTabCenterX, ballPositionX, ballScale, ballOpacity, ballGlow]
+    [getTabCenterX, ballPositionX, ballScale, ballOpacity]
   );
 
   // 处理标签点击
@@ -329,7 +304,7 @@ function AppContent() {
                 ]}
               />
 
-              {/* 光球指示器 */}
+              {/* 弥散光球指示器 */}
               <Animated.View
                 style={[
                   styles.lightBall,
@@ -339,30 +314,50 @@ function AppContent() {
                       { scale: ballScale },
                     ],
                     opacity: ballOpacity,
-                    shadowColor: isDark ? '#64B5F6' : '#2196F3',
-                    shadowOpacity: ballGlow,
                   },
                 ]}
               >
-                {/* Bloom 体积泛光 */}
+                {/* 最外层弥散光晕 - 低透明度 */}
                 <View
                   style={[
-                    styles.ballBloom,
+                    styles.ballGlowOuter,
                     {
                       backgroundColor: isDark
-                        ? 'rgba(100, 181, 246, 0.3)'
-                        : 'rgba(33, 150, 243, 0.3)',
+                        ? 'rgba(255, 255, 255, 0.05)'
+                        : 'rgba(255, 255, 255, 0.08)',
                     },
                   ]}
                 />
-                {/* 光球核心 */}
+                {/* 中层弥散光晕 */}
+                <View
+                  style={[
+                    styles.ballGlowMiddle,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255, 255, 255, 0.12)'
+                        : 'rgba(255, 255, 255, 0.18)',
+                    },
+                  ]}
+                />
+                {/* 内层光晕 */}
+                <View
+                  style={[
+                    styles.ballGlowInner,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255, 255, 255, 0.25)'
+                        : 'rgba(255, 255, 255, 0.35)',
+                    },
+                  ]}
+                />
+                {/* 核心高亮 - 最亮 */}
                 <View
                   style={[
                     styles.ballCore,
                     {
                       backgroundColor: isDark
-                        ? 'rgba(100, 181, 246, 0.9)'
-                        : 'rgba(33, 150, 243, 0.9)',
+                        ? 'rgba(255, 255, 255, 0.5)'
+                        : 'rgba(255, 255, 255, 0.7)',
                     },
                   ]}
                 />
@@ -484,7 +479,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
   },
-  // 光球
+  // 光球容器
   lightBall: {
     position: 'absolute',
     top: 4,
@@ -493,23 +488,33 @@ const styles = StyleSheet.create({
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 20,
-    elevation: 10,
   },
-  // Bloom 体积泛光
-  ballBloom: {
+  // 最外层弥散光晕
+  ballGlowOuter: {
     position: 'absolute',
-    width: TAB_WIDTH + 20,
-    height: 72,
-    borderRadius: 36,
-    top: -8,
+    width: TAB_WIDTH + 32,
+    height: 80,
+    borderRadius: 40,
   },
-  // 光球核心
+  // 中层弥散光晕
+  ballGlowMiddle: {
+    position: 'absolute',
+    width: TAB_WIDTH + 16,
+    height: 68,
+    borderRadius: 34,
+  },
+  // 内层光晕
+  ballGlowInner: {
+    position: 'absolute',
+    width: TAB_WIDTH + 4,
+    height: 60,
+    borderRadius: 30,
+  },
+  // 核心高亮
   ballCore: {
-    width: TAB_WIDTH - 8,
-    height: 48,
-    borderRadius: 24,
+    width: TAB_WIDTH - 4,
+    height: 52,
+    borderRadius: 26,
   },
   // Tab 容器
   tabsContainer: {
